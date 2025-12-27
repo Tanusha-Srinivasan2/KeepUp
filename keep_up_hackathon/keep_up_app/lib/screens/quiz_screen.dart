@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../models/quiz_model.dart';
+import '../widgets/voice_button.dart'; // Import your new button
 
 class QuizScreen extends StatefulWidget {
   final List<QuizQuestion> questions;
-
   const QuizScreen({super.key, required this.questions});
 
   @override
@@ -16,26 +17,37 @@ class _QuizScreenState extends State<QuizScreen> {
   bool answered = false;
   bool showExplanation = false;
   int score = 0;
+  final FlutterTts flutterTts = FlutterTts();
+
+  Future<void> _speak(String text) async {
+    await flutterTts.speak(text);
+  }
+
+  @override
+  void dispose() {
+    flutterTts.stop();
+    super.dispose();
+  }
 
   void handleAnswer(int selectedIndex) {
     if (answered) return;
-
     bool isCorrect =
         selectedIndex == widget.questions[currentIndex].correctIndex;
     if (isCorrect) score++;
 
     setState(() {
       answered = true;
-      // Wait 1 second, then show the explanation card
       Future.delayed(const Duration(seconds: 1), () {
-        setState(() {
-          showExplanation = true;
-        });
+        if (mounted) {
+          setState(() => showExplanation = true);
+          _speak(widget.questions[currentIndex].explanation); // Auto-speak
+        }
       });
     });
   }
 
   void nextQuestion() {
+    flutterTts.stop();
     if (currentIndex < widget.questions.length - 1) {
       setState(() {
         currentIndex++;
@@ -43,7 +55,6 @@ class _QuizScreenState extends State<QuizScreen> {
         showExplanation = false;
       });
     } else {
-      // Quiz Over - Go back
       Navigator.pop(context);
     }
   }
@@ -52,46 +63,57 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget build(BuildContext context) {
     final question = widget.questions[currentIndex];
 
-    // If showing explanation, show the "Learn More" card
+    // --- FULL SCREEN EXPLANATION (No Card Margins) ---
     if (showExplanation) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: Center(
-          child: Container(
-            margin: const EdgeInsets.all(20),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF00E676), width: 2),
-            ),
+        // Also has the Voice Button!
+        floatingActionButton: const VoiceAssistantButton(),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(30.0),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   "DID YOU KNOW?",
                   style: GoogleFonts.poppins(
                     color: const Color(0xFF00E676),
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
                   ),
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  question.explanation,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 18),
+                const SizedBox(height: 40),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      question.explanation,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 22,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 30),
-                ElevatedButton(
-                  onPressed: nextQuestion,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
-                  ),
-                  child: Text(
-                    "Next",
-                    style: GoogleFonts.poppins(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: ElevatedButton(
+                    onPressed: nextQuestion,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E676),
+                    ),
+                    child: Text(
+                      "NEXT QUESTION",
+                      style: GoogleFonts.poppins(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                 ),
@@ -102,44 +124,56 @@ class _QuizScreenState extends State<QuizScreen> {
       );
     }
 
-    // Otherwise, show the Question
+    // --- QUESTION SCREEN ---
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text("Daily Challenge ${currentIndex + 1}/3"),
+        title: Text("Challenge ${currentIndex + 1}/3"),
         backgroundColor: Colors.transparent,
       ),
+      floatingActionButton:
+          const VoiceAssistantButton(), // <--- VOICE BUTTON HERE
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               question.question,
+              textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 50),
             ...List.generate(question.options.length, (index) {
               return Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
+                padding: const EdgeInsets.only(bottom: 16.0),
                 child: SizedBox(
                   width: double.infinity,
-                  height: 60,
+                  height: 65,
                   child: ElevatedButton(
                     onPressed: () => handleAnswer(index),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: answered
                           ? (index == question.correctIndex
                                 ? Colors.green
-                                : (Colors.grey[800]))
-                          : const Color(0xFF2C2C2C),
+                                : Colors.grey[900])
+                          : const Color(0xFF1E1E1E),
+                      side: BorderSide(
+                        color: answered && index == question.correctIndex
+                            ? Colors.green
+                            : Colors.grey[800]!,
+                      ),
                     ),
                     child: Text(
                       question.options[index],
-                      style: GoogleFonts.poppins(color: Colors.white),
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                 ),

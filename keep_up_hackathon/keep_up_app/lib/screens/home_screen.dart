@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
-// IMPORTS for Quiz Feature
 import '../models/news_model.dart';
-import '../models/quiz_model.dart';
-import 'quiz_screen.dart';
+import '../widgets/voice_button.dart'; // <--- NEW IMPORT
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String? categoryFilter;
+
+  const HomeScreen({super.key, this.categoryFilter});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -19,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<NewsCard> cards = [];
   bool isLoading = true;
+  final FlutterTts flutterTts = FlutterTts(); // TTS for reading cards
 
   @override
   void initState() {
@@ -26,67 +28,46 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchNews();
   }
 
-  // --- FEATURE 1: NEWS FEED ---
-  Future<void> fetchNews() async {
-    final url = Uri.parse('http://10.0.2.2:8080/api/news/feed');
-
-    try {
-      final response = await http.get(url);
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        setState(() {
-          cards = data.map((json) => NewsCard.fromJson(json)).toList();
-          isLoading = false;
-        });
-      } else {
-        throw Exception("Failed to load news");
-      }
-    } catch (e) {
-      print("Error fetching news: $e");
-      setState(() => isLoading = false);
-    }
+  // Speak function for the Card content only
+  Future<void> _speak(String text) async {
+    await flutterTts.setLanguage("en-US");
+    await flutterTts.speak(text);
   }
 
-  // --- FEATURE 2: DAILY QUIZ ---
-  Future<void> startQuiz() async {
-    // 1. Fetch the Quiz from Backend
-    final url = Uri.parse('http://10.0.2.2:8080/api/news/quiz');
+  @override
+  void dispose() {
+    flutterTts.stop();
+    super.dispose();
+  }
 
+  Future<void> fetchNews() async {
+    final url = Uri.parse('http://10.0.2.2:8080/api/news/feed');
     try {
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
-        // 2. Parse the JSON List
-        final List<dynamic> quizData = json.decode(response.body);
-
-        final List<QuizQuestion> questions = quizData
-            .map((q) => QuizQuestion.fromJson(q))
+        final List<dynamic> data = json.decode(response.body);
+        List<NewsCard> allCards = data
+            .map((json) => NewsCard.fromJson(json))
             .toList();
 
-        // 3. Navigate to Quiz Screen
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => QuizScreen(questions: questions),
-            ),
-          );
+        // Filter by Category if one was selected
+        if (widget.categoryFilter != null) {
+          allCards = allCards
+              .where(
+                (c) => c.topic.toLowerCase().contains(
+                  widget.categoryFilter!.toLowerCase(),
+                ),
+              )
+              .toList();
         }
-      } else {
-        print("Server error: ${response.statusCode}");
+
+        setState(() {
+          cards = allCards;
+          isLoading = false;
+        });
       }
     } catch (e) {
-      print("Error fetching quiz: $e");
-      // Show a little popup if it fails
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("No quiz found! Generate one on the backend first."),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      setState(() => isLoading = false);
     }
   }
 
@@ -94,32 +75,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+
+      // GLOBAL VOICE ASSISTANT BUTTON (Replaces old mic logic)
+      floatingActionButton: const VoiceAssistantButton(),
+
       appBar: AppBar(
         title: Text(
-          "Keep Up",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          widget.categoryFilter ?? "News Feed",
+          style: GoogleFonts.poppins(color: Colors.white),
         ),
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          // --- NEW: PLAY QUIZ BUTTON ---
-          IconButton(
-            onPressed: startQuiz,
-            icon: const Icon(
-              Icons.videogame_asset,
-              color: Color(0xFF00E676),
-              size: 30,
-            ),
-            tooltip: "Play Daily Challenge",
-          ),
-          const SizedBox(width: 10),
-          // Refresh Button
-          IconButton(
-            onPressed: fetchNews,
-            icon: const Icon(Icons.refresh, color: Colors.white),
-          ),
-          const SizedBox(width: 10),
-        ],
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: isLoading
           ? const Center(
@@ -128,17 +94,14 @@ class _HomeScreenState extends State<HomeScreen> {
           : cards.isEmpty
           ? const Center(
               child: Text(
-                "No News Found. Try Generating on Backend!",
+                "No news found.",
                 style: TextStyle(color: Colors.white),
               ),
             )
           : CardSwiper(
               cardsCount: cards.length,
-              cardBuilder:
-                  (context, index, percentThresholdX, percentThresholdY) {
-                    final card = cards[index];
-                    return _buildNewsCard(card);
-                  },
+              cardBuilder: (context, index, x, y) =>
+                  _buildNewsCard(cards[index]),
             ),
     );
   }
@@ -156,30 +119,25 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00E676).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                card.topic.toUpperCase(),
-                style: GoogleFonts.poppins(
-                  color: const Color(0xFF00E676),
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+            Text(
+              card.topic.toUpperCase(),
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF00E676),
+                fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               card.contentLine,
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
+              style: GoogleFonts.poppins(fontSize: 22, color: Colors.white),
+            ),
+            const SizedBox(height: 30),
+
+            // This button reads the CARD content (TTS)
+            IconButton(
+              onPressed: () => _speak(card.contentLine),
+              icon: const Icon(Icons.volume_up, color: Colors.white, size: 40),
             ),
           ],
         ),

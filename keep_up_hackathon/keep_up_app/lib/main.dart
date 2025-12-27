@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/home_screen.dart';
+import 'screens/landing_page.dart';
 
 void main() {
   runApp(const KeepUpApp());
@@ -27,7 +28,7 @@ class KeepUpApp extends StatelessWidget {
         ).apply(bodyColor: Colors.white, displayColor: Colors.white),
       ),
       // We will create this HomeScreen next!
-      home: const HomeScreen(),
+      home: const LandingPage(),
     );
   }
 }
