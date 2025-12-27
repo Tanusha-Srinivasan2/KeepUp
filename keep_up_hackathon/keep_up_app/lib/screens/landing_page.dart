@@ -1,37 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'category_screen.dart';
-import 'home_screen.dart'; // We will update this to accept categories
-import 'leaderboard_screen.dart'; // We will create this next
-import 'quiz_screen.dart'; // We need to fetch quiz before navigating
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+
+// Navigation Imports
+import 'category_screen.dart';
+import 'leaderboard_screen.dart';
+import 'quiz_screen.dart';
 import '../models/quiz_model.dart';
+
+// Widget Imports
+import '../widgets/voice_button.dart'; // <--- NEW IMPORT
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
 
   Future<void> _startQuiz(BuildContext context) async {
-    // Fetch Quiz Logic here (moved from HomeScreen)
+    // Show loading indicator
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Loading Daily Challenge...")));
+
     try {
+      // NOTE: Using 10.0.2.2 for Android Emulator
       final url = Uri.parse('http://10.0.2.2:8080/api/news/quiz');
       final response = await http.get(url);
+
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
         final List<QuizQuestion> questions = quizData
             .map((q) => QuizQuestion.fromJson(q))
             .toList();
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => QuizScreen(questions: questions),
+
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => QuizScreen(questions: questions),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Could not load quiz. Try generating on backend."),
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Could not load quiz.")));
     }
   }
 
@@ -39,6 +56,9 @@ class LandingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      // GLOBAL VOICE ASSISTANT BUTTON
+      floatingActionButton: const VoiceAssistantButton(),
+
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -65,7 +85,10 @@ class LandingPage extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF00E676).withOpacity(0.2), Colors.black],
+                    colors: [
+                      const Color(0xFF00E676).withOpacity(0.2),
+                      Colors.black,
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFF00E676)),
@@ -180,7 +203,7 @@ class LandingPage extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+              const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
             ],
           ),
         ),
