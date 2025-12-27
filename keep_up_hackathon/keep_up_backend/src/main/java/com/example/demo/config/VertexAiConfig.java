@@ -27,7 +27,7 @@ public class VertexAiConfig {
         System.out.println("✅ MANUALLY STARTING VERTEX AI WITH AUTH");
         return new VertexAI.Builder()
                 .setProjectId("project-e0914f81-9c04-40ed-a44")
-                .setLocation("us-central1")
+                .setLocation("asia-south1")
                 .setCredentials(credentials)
                 .build();
     }

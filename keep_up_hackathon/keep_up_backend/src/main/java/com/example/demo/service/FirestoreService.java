@@ -1,53 +1,42 @@
 package com.example.demo.service;
 
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.SetOptions;
-import com.example.demo.model.NewsSummary;
 import com.example.demo.model.ToonSegment;
+import com.google.cloud.firestore.Firestore;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 @Service
 public class FirestoreService {
 
-    private final Firestore firestore;
+    private final Firestore db;
 
-    // Spring Boot automatically connects to Google Cloud and injects this
-    public FirestoreService(Firestore firestore) {
-        this.firestore = firestore;
+    public FirestoreService(Firestore db) {
+        this.db = db;
     }
 
-    // JOB 1: Save the specific line (For Vector Search/Context)
-    // Called by NewsIndexingService
+    // METHOD 1: Save a single news segment (Fixes your error!)
     public void saveToonSegment(ToonSegment segment) {
         try {
-            // "toon_index" is the collection where the 'Brain' looks for answers
-            firestore.collection("toon_index")
+            // NOTE: Using "toon_index" to match your database screenshot
+            db.collection("toon_index")
                     .document(segment.getId())
-                    .set(segment, SetOptions.merge());
-
+                    .set(segment);
+            System.out.println("Saved segment: " + segment.getId());
         } catch (Exception e) {
-            System.err.println("Failed to save segment: " + segment.getId());
-            e.printStackTrace();
+            System.err.println("Error saving to Firestore: " + e.getMessage());
         }
     }
 
-    // JOB 2: Save the Daily Edition (For the Phone Screen)
-    // You can call this from NewsController if you want to create a daily summary
-    public void saveDailySummary(NewsSummary summary) {
+    // METHOD 2: Get all segments (For the Chatbot)
+    public List<ToonSegment> getAllToonSegments() {
         try {
-            // "daily_news" is the collection the App loads when it opens
-            firestore.collection("daily_news")
-                    .document(summary.getId())
-                    .set(summary, SetOptions.merge())
-                    .get(); // .get() forces it to wait until finished
-
-            System.out.println("Saved Daily Summary: " + summary.getId());
-
-        } catch (InterruptedException | ExecutionException e) {
-            System.err.println("Error saving daily summary");
+            var query = db.collection("toon_index").get();
+            return query.get().toObjects(ToonSegment.class);
+        } catch (Exception e) {
             e.printStackTrace();
+            return List.of();
         }
     }
 }

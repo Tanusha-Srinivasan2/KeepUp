@@ -12,33 +12,41 @@ import java.util.UUID;
 public class NewsIndexingService {
 
     private final FirestoreService firestoreService;
-    private final ObjectMapper objectMapper; // Converts String <-> JSON
+    private final ObjectMapper objectMapper;
 
     public NewsIndexingService(FirestoreService firestoreService) {
         this.firestoreService = firestoreService;
         this.objectMapper = new ObjectMapper();
     }
 
+    // 1. Process and Save News (Gemini -> Database)
     public void processAndSave(String jsonOutput) {
         try {
-            // 1. Clean up the string (Gemini sometimes adds ```json markers)
+            // Clean the JSON string
             String cleanJson = jsonOutput.replace("```json", "").replace("```", "").trim();
 
-            // 2. Convert string to Java Objects
+            // Convert string to Java Objects
             List<ToonSegment> segments = objectMapper.readValue(cleanJson, new TypeReference<List<ToonSegment>>(){});
 
-            // 3. Save each segment individually
+            // Save each segment
             for (ToonSegment segment : segments) {
-                // Ensure it has an ID
                 if (segment.getId() == null) segment.setId(UUID.randomUUID().toString());
-
-                // Save to 'toon_index' collection
                 firestoreService.saveToonSegment(segment);
             }
             System.out.println("Successfully indexed " + segments.size() + " segments!");
 
         } catch (Exception e) {
             System.err.println("Error parsing JSON: " + e.getMessage());
+        }
+    }
+
+    // 2. Fetch all news for the Chatbot
+    public List<ToonSegment> getAllNewsSegments() {
+        try {
+            return firestoreService.getAllToonSegments();
+        } catch (Exception e) {
+            System.err.println("Error fetching news: " + e.getMessage());
+            return java.util.Collections.emptyList();
         }
     }
 }

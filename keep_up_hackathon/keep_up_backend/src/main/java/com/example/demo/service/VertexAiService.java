@@ -59,4 +59,53 @@ public class VertexAiService {
 
         return response.getResult().getOutput().getText();
     }
+    // --- PHASE 3: THE NEW ADDITION (Daily Quiz) ---
+    public String generateQuizFromNews(String rawNewsFacts) {
+        String instructions = """
+                Based on the news summary below, generate 3 multiple-choice quiz questions.
+                Output ONLY raw JSON.
+                
+                JSON Format:
+                [
+                  {
+                    "id": "Q-01",
+                    "question": "Which company's stock rallied today?",
+                    "options": ["Apple", "Tesla", "Nvidia", "Amazon"],
+                    "correctAnswer": "Nvidia",
+                    "xpReward": 50
+                  }
+                ]
+                """;
+
+        String finalPrompt = instructions + "\n\nNEWS SOURCE:\n" + rawNewsFacts;
+
+        ChatResponse response = chatModel.call(new Prompt(finalPrompt,
+                VertexAiGeminiChatOptions.builder()
+                        .model("gemini-2.5-flash")
+                        .temperature(0.2) // Low temp for factual accuracy
+                        .build()
+        ));
+
+        return response.getResult().getOutput().getText();
+    }
+    // --- PHASE 4: VOICE ASSISTANT BRAIN ---
+    public String chatWithNews(String userQuestion, String newsContext) {
+        String systemPrompt = """
+            You are 'KeepUp', a helpful AI news assistant. 
+            Answer the user's question using ONLY the provided news context.
+            Keep your answer short (under 2 sentences) and conversational.
+            If the answer isn't in the context, say "I don't see that in today's news."
+            """;
+
+        String fullPrompt = systemPrompt + "\n\nCONTEXT:\n" + newsContext + "\n\nUSER QUESTION:\n" + userQuestion;
+
+        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(new org.springframework.ai.chat.prompt.Prompt(fullPrompt,
+                org.springframework.ai.vertexai.gemini.VertexAiGeminiChatOptions.builder()
+                        .model("gemini-2.5-flash")
+                        .temperature(0.3)
+                        .build()
+        ));
+
+        return response.getResult().getOutput().getText();
+    }
 }
