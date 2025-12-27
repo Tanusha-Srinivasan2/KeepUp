@@ -65,4 +65,10 @@ public class NewsController {
         // 3. Chat
         return vertexAiService.chatWithNews(question, contextBuilder.toString());
     }
+    // URL: http://localhost:8080/api/news/feed
+    @GetMapping("/feed")
+    public List<ToonSegment> getNewsFeed() {
+        // This reuses the method you already wrote!
+        return newsIndexingService.getAllNewsSegments();
+    }
 }
