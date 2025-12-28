@@ -18,7 +18,21 @@ public class VertexAiService {
 
     // PHASE 1: The Researcher (Gemini Pro)
     public String researchNews(String region) {
-        String prompt = "Find 5 distinct, trending news headlines for today in " + region + ". Cover different topics (Tech, Sports, Politics, Business, Science). Just list the facts.";
+        String prompt = "Role: You are the Chief Editor of a high-stakes news app. Your goal is to curate only the top 5 most impactful, verified, and actionable news formatted in a way that can be easily understood by any age group\n" +
+                "\n" +
+                "Filtering Rules for the news story(The \"Quality Gate\"):\n" +
+                "\n" +
+                "Impact: The story must affect at least 1 million people or move a major financial market.\n" +
+                "\n" +
+                "Recency: Must be less than 24 hours old.\n" +
+                "\n" +
+                "Credibility: Must be verified by at least 2 distinct major sources (e.g., Reuters, AP, Bloomberg).\n" +
+                "\n" +
+                "No Fluff: Ignore celebrity gossip, minor sports updates, or rumors.Search for 10 potential top stories.\n" +
+                "\n" +
+                "Rank them internally based on the \"Filtering Rules\" above.\n" +
+                "\n" +
+                "Select ONLY the top 5 stories. so in this way Find 5 distinct, trending news headlines for today in " + region + ". Cover 1 news each for each of the topics (Tech, Sports, Politics, Business, Science). Just list the facts.";
 
         // FIX: Using "gemini-1.5-flash" (Correct Version)
         return chatModel.call(new Prompt(prompt,
@@ -38,7 +52,7 @@ public class VertexAiService {
             RULES:
             1. EXTRACT 5 COMPLETELY DIFFERENT STORIES. Do not repeat the same story.
             2. Each item must be a different topic (e.g., one Tech, one Sport, one World).
-            3. "contentLine" must be punchy and under 12 words.
+            3. "contentLine" must be punchy and under 12 words and easy to understand.
             4. Output ONLY the raw JSON string (no markdown, no ```json).
             
             SCHEMA:
@@ -71,7 +85,7 @@ public class VertexAiService {
                 "question": "The actual question?",
                 "options": ["Wrong 1", "Correct Answer", "Wrong 2"],
                 "correctIndex": 1,
-                "explanation": "A short 'Did You Know' fact explaining why."
+                "explanation": "A short explanation of how it impacts a users life directly(explanation like im a 10 year old)"
               }
             ]
             
@@ -92,8 +106,8 @@ public class VertexAiService {
             
             INSTRUCTIONS:
             1. I will provide you with a list of 'News Context' below.
-            2. IF the user's question is about current events or topics found in that context, use the context to answer.
-            3. IF the user asks a general question (e.g., "Hi", "What is Java?", "Tell me a joke"), IGNORE the context and answer directly using your general knowledge.
+            2. IF the user's question is about current events or topics found in that context, use the context to answer in not more than 3 lines.
+            3. IF the user asks a general question (e.g., "Hi", "What is Java?", "Tell me a joke"), IGNORE the context and answer directly using your general knowledge in not more than 3 lines.
             4. Do NOT say "I don't see that in the context" for general questions. Just answer them.
             
             NEWS CONTEXT:
@@ -120,7 +134,7 @@ public class VertexAiService {
             [
               {
                 "headline": "Short Headline",
-                "summary": "2-3 sentences explaining exactly what happened and why it matters.",
+                "summary": "2-3 sentences maximum explaining exactly what happened and why it matters.",
                 "timeAgo": "Yesterday"
               }
             ]
