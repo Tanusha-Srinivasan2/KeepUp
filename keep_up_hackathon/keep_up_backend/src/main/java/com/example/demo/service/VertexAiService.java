@@ -18,94 +18,119 @@ public class VertexAiService {
 
     // PHASE 1: The Researcher (Gemini Pro)
     public String researchNews(String region) {
-        String systemPrompt = "You are a senior news editor. Find the top 3 most viral news stories in " + region + " today. " +
-                "Verify facts using Google Search. Output a raw summary.";
+        String prompt = "Find 5 distinct, trending news headlines for today in " + region + ". Cover different topics (Tech, Sports, Politics, Business, Science). Just list the facts.";
 
-        ChatResponse response = chatModel.call(new Prompt(systemPrompt,
+        // FIX: Using "gemini-1.5-flash" (Correct Version)
+        return chatModel.call(new Prompt(prompt,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-pro") // FIX: .withModel -> .model
-                        .temperature(0.4)        // FIX: .withTemperature -> .temperature
+                        .model("gemini-2.5-flash")
                         .build()
-        ));
+        )).getResult().getOutput().getText();
 
-        // FIX: Ensure you get the content from the output message
-        return response.getResult().getOutput().getText();
+
     }
 
     // PHASE 2: The Formatter (Gemini Flash -> JSON)
     public String formatToToonJson(String rawFacts) {
-        String instructions = """
-            Convert the following news summary into a JSON list of 'ToonSegments'.
-            Each segment must be a single fact/sentence.
-            JSON Format:
+        String prompt = """
+            You are a backend API. Convert the following news facts into a strict JSON list of 5 items.
+            
+            RULES:
+            1. EXTRACT 5 COMPLETELY DIFFERENT STORIES. Do not repeat the same story.
+            2. Each item must be a different topic (e.g., one Tech, one Sport, one World).
+            3. "contentLine" must be punchy and under 12 words.
+            4. Output ONLY the raw JSON string (no markdown, no ```json).
+            
+            SCHEMA:
             [
               {
-                "id": "T-01",
-                "topic": "Business",
-                "contentLine": "Stock markets rallied today.",
-                "keywords": ["Stocks", "Money"]
+                "topic": "CATEGORY",
+                "contentLine": "Headline text here.",
+                "keywords": ["tag1", "tag2"]
               }
             ]
-            """;
+            
+            INPUT FACTS:
+            """ + rawFacts;
 
-        String finalPrompt = instructions + "\n\nNEWS DATA:\n" + rawFacts;
-
-        ChatResponse response = chatModel.call(new Prompt(finalPrompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash") // FIX: .withModel -> .model
-                        .temperature(0.1)        // FIX: .withTemperature -> .temperature
-                        .build()
-        ));
-
-        return response.getResult().getOutput().getText();
-    }
-    // --- PHASE 3: THE NEW ADDITION (Daily Quiz) ---
-    public String generateQuizFromNews(String rawNewsFacts) {
-        String instructions = """
-                Based on the news summary below, generate 3 multiple-choice quiz questions.
-                Output ONLY raw JSON.
-                
-                JSON Format:
-                [
-                  {
-                    "id": "Q-01",
-                    "question": "Which company's stock rallied today?",
-                    "options": ["Apple", "Tesla", "Nvidia", "Amazon"],
-                    "correctAnswer": "Nvidia",
-                    "xpReward": 50
-                  }
-                ]
-                """;
-
-        String finalPrompt = instructions + "\n\nNEWS SOURCE:\n" + rawNewsFacts;
-
-        ChatResponse response = chatModel.call(new Prompt(finalPrompt,
+        return chatModel.call(new Prompt(prompt,
                 VertexAiGeminiChatOptions.builder()
                         .model("gemini-2.5-flash")
-                        .temperature(0.2) // Low temp for factual accuracy
+                        .temperature(0.5)
                         .build()
-        ));
+        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();}
+    // --- PHASE 3: THE NEW ADDITION (Daily Quiz) ---
+    public String generateQuizFromNews(String rawFacts) {
+        String prompt = """
+            Create a Daily Quiz of 3 questions based on these news facts.
+            Output strict JSON only.
+            
+            SCHEMA:
+            [
+              {
+                "question": "The actual question?",
+                "options": ["Wrong 1", "Correct Answer", "Wrong 2"],
+                "correctIndex": 1,
+                "explanation": "A short 'Did You Know' fact explaining why."
+              }
+            ]
+            
+            NEWS FACTS:
+            """ + rawFacts;
 
-        return response.getResult().getOutput().getText();
-    }
+        return chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder()
+                        .model("gemini-2.5-flash")
+                        .temperature(0.4)
+                        .build()
+        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();}
     // --- PHASE 4: VOICE ASSISTANT BRAIN ---
+    // 4. Chat Assistant (SMART HYBRID MODE)
     public String chatWithNews(String userQuestion, String newsContext) {
         String systemPrompt = """
-            You are 'KeepUp', a helpful AI news assistant. 
-            Answer the user's question using ONLY the provided news context.
-            Keep your answer short (under 2 sentences) and conversational.
-            If the answer isn't in the context, say "I don't see that in today's news."
-            """;
+            You are 'KeepUp', a smart AI assistant.
+            
+            INSTRUCTIONS:
+            1. I will provide you with a list of 'News Context' below.
+            2. IF the user's question is about current events or topics found in that context, use the context to answer.
+            3. IF the user asks a general question (e.g., "Hi", "What is Java?", "Tell me a joke"), IGNORE the context and answer directly using your general knowledge.
+            4. Do NOT say "I don't see that in the context" for general questions. Just answer them.
+            
+            NEWS CONTEXT:
+            """ + newsContext;
 
-        String fullPrompt = systemPrompt + "\n\nCONTEXT:\n" + newsContext + "\n\nUSER QUESTION:\n" + userQuestion;
-
-        org.springframework.ai.chat.model.ChatResponse response = chatModel.call(new org.springframework.ai.chat.prompt.Prompt(fullPrompt,
-                org.springframework.ai.vertexai.gemini.VertexAiGeminiChatOptions.builder()
+        return chatModel.call(new Prompt(systemPrompt + "\nUser: " + userQuestion,
+                VertexAiGeminiChatOptions.builder()
                         .model("gemini-2.5-flash")
-                        .temperature(0.3)
                         .build()
-        ));
+        )).getResult().getOutput().getText();
+    }
+    // 5. Catch Up / Recap Generation
+    public String generateCatchUpContent(String region) {
+        // FIX: Use %s and .formatted() instead of concatenation
+        String prompt = """
+            You are a News Recap Assistant.
+            Find 5 MAJOR events from the LAST 48 HOURS in %s.
+            
+            RULES:
+            1. Summarize each event in very simple, easy-to-understand language (EL15 - Explain Like I'm 5).
+            2. Output strict JSON only.
+            
+            SCHEMA:
+            [
+              {
+                "headline": "Short Headline",
+                "summary": "2-3 sentences explaining exactly what happened and why it matters.",
+                "timeAgo": "Yesterday"
+              }
+            ]
+            """.formatted(region);
 
-        return response.getResult().getOutput().getText();
+        return chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder()
+                        .model("gemini-2.5-flash")
+                        .temperature(0.5)
+                        .build()
+        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }
 }

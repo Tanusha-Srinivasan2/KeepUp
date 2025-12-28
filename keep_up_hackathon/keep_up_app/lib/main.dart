@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/home_screen.dart';
 import 'screens/landing_page.dart';
+import 'services/auth_service.dart'; // <--- NEW IMPORT
 
-void main() {
+void main() async {
+  // <--- Changed to async
+  // 1. Required for async code in main
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Register/Login the user before the app starts
+  await AuthService.loginOrRegister();
+
   runApp(const KeepUpApp());
 }
 
@@ -27,7 +34,6 @@ class KeepUpApp extends StatelessWidget {
           Theme.of(context).textTheme,
         ).apply(bodyColor: Colors.white, displayColor: Colors.white),
       ),
-      // We will create this HomeScreen next!
       home: const LandingPage(),
     );
   }

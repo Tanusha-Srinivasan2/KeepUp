@@ -4,8 +4,20 @@ import com.example.demo.model.User;
 import com.google.cloud.firestore.Firestore;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import com.google.cloud.firestore.DocumentSnapshot;  // <--- This fixes your specific error
+import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.Query;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
+import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.concurrent.ExecutionException;
 @Service
 public class UserService {
 
@@ -98,5 +110,82 @@ public class UserService {
                 .limit(20);
 
         return query.get().get().toObjects(User.class);
+    }
+    // --- NEW: ADD THESE METHODS FOR THE FLUTTER APP ---
+
+    // 6. Global Leaderboard (For the Mobile App)
+    // We map your "User" object to the exact JSON format the Flutter App expects
+    public java.util.List<java.util.Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
+        java.util.List<java.util.Map<String, Object>> response = new java.util.ArrayList<>();
+
+        // Get top 10 users regardless of league
+        var query = firestore.collection("users")
+                .orderBy("xp", com.google.cloud.firestore.Query.Direction.DESCENDING)
+                .limit(10)
+                .get()
+                .get();
+
+        for (var doc : query.getDocuments()) {
+            User user = doc.toObject(User.class);
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            // MAP JAVA FIELDS -> FLUTTER FIELDS
+            map.put("id", user.getUserId());     // Java: userId -> Flutter: id
+            map.put("name", user.getUsername()); // Java: username -> Flutter: name
+            map.put("xp", user.getXp());
+            response.add(map);
+        }
+        return response;
+    }
+
+    // 7. Init Dummy Data (To populate the list instantly)
+    public String initDummyData() {
+        try {
+            // Using your existing createUser/addLogic would be cleaner,
+            // but let's write directly to DB for speed.
+            createDummy("user_1", "Hacker (You)", 1250, "Gold");
+            createDummy("user_2", "Alice", 1400, "Gold");
+            createDummy("user_3", "Bob", 800, "Silver");
+            createDummy("user_4", "Charlie", 2100, "Gold");
+            createDummy("user_5", "Dave", 1100, "Silver");
+            return "Leaderboard initialized!";
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    private void createDummy(String id, String name, int xp, String league) {
+        User u = new User(id, name);
+        u.setXp(xp);
+        u.setLeague(league);
+        firestore.collection("users").document(id).set(u);
+    }
+    // 8. Get User Profile with Dynamic Rank & Streak
+    public Map<String, Object> getUserProfile(String userId) throws ExecutionException, InterruptedException {
+        // A. Get the specific user
+        DocumentSnapshot userDoc = firestore.collection("users").document(userId).get().get();
+        if (!userDoc.exists()) return null;
+
+        User user = userDoc.toObject(User.class);
+
+        // B. Calculate Rank (Expensive but fine for hackathons)
+        // We fetch everyone, sort by XP, and find where this user sits.
+        var allUsers = getGlobalLeaderboard();
+        int rank = 0;
+
+        for (int i = 0; i < allUsers.size(); i++) {
+            if (allUsers.get(i).get("id").equals(userId)) {
+                rank = i + 1; // Rank is Index + 1
+                break;
+            }
+        }
+
+        // C. Build Response
+        Map<String, Object> response = new HashMap<>();
+        response.put("xp", user.getXp());
+        response.put("rank", rank > 0 ? rank : "-"); // If not found, show "-"
+        response.put("streak", 3); // Hardcoded to 3 for now (Logic requires daily tracking)
+        response.put("username", user.getUsername());
+
+        return response;
     }
 }
