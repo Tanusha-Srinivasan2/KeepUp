@@ -4,8 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-import '../widgets/voice_button.dart';
-import '../models/user_model.dart'; // Ensure this model exists in lib/models/
+import '../models/user_model.dart';
+import '../main.dart'; // To access KeepUpApp.primaryYellow, bgPurple, etc.
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -22,121 +22,123 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMyId();
-    fetchLeaderboard();
+    _initializeApp();
   }
 
-  // 1. Get the ID stored on this phone
-  Future<void> _loadMyId() async {
+  Future<void> _initializeApp() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      // Default to empty if not found
-      myUserId = prefs.getString('user_id') ?? "";
-    });
+    if (mounted) {
+      setState(() {
+        myUserId = prefs.getString('user_id') ?? "";
+      });
+    }
+    await fetchLeaderboard();
   }
 
-  // 2. Fetch the Top 10 from Java Backend
   Future<void> fetchLeaderboard() async {
     try {
-      // NOTE: Use 10.0.2.2 for Android Emulator
       final url = Uri.parse('http://10.0.2.2:8080/api/news/leaderboard');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        setState(() {
-          users = data.map((e) => UserStats.fromJson(e)).toList();
-          isLoading = false;
-        });
-      } else {
-        throw Exception("Failed to load");
+        if (mounted) {
+          setState(() {
+            users = data.map((e) => UserStats.fromJson(e)).toList();
+            isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      print("Error fetching leaderboard: $e");
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      debugPrint("Error fetching leaderboard: $e");
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton: const VoiceAssistantButton(),
+      // Light Yellow background from your theme
+      backgroundColor: const Color(0xFFFEFCE0),
       appBar: AppBar(
         title: Text(
           "Global Rankings",
-          style: GoogleFonts.poppins(color: Colors.white),
+          style: GoogleFonts.nunito(
+            fontWeight: FontWeight.bold,
+            color: KeepUpApp.bgPurple,
+          ),
         ),
         backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: KeepUpApp.bgPurple),
       ),
       body: isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00E676)),
+              child: CircularProgressIndicator(color: KeepUpApp.bgPurple),
             )
           : users.isEmpty
           ? Center(
-              child: Text(
-                "No users found.",
-                style: GoogleFonts.poppins(color: Colors.white),
-              ),
+              child: Text("No rankings found.", style: GoogleFonts.nunito()),
             )
           : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 10),
               itemCount: users.length,
               itemBuilder: (context, index) {
                 final user = users[index];
-
-                // CHECK: Is this row ME?
-                final isMe = user.id == myUserId;
+                // Correct comparison logic using unique ID
+                final bool isMe = user.id == myUserId;
 
                 return Container(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 8,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    // Highlight background if it's me
-                    color: isMe
-                        ? const Color(0xFF00E676).withOpacity(0.2)
-                        : const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(15),
-                    // Highlight border if it's me
+                    // Highlight: Solid Yellow for YOU, White for OTHERS
+                    color: isMe ? KeepUpApp.primaryYellow : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
                     border: isMe
-                        ? Border.all(color: const Color(0xFF00E676))
+                        ? Border.all(color: KeepUpApp.bgPurple, width: 2)
                         : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     leading: CircleAvatar(
-                      // Rank Colors: 1=Gold, 2=Silver, 3=Bronze, Others=Grey
-                      backgroundColor: index == 0
-                          ? const Color(0xFFFFD700) // Gold
-                          : (index == 1
-                                ? const Color(0xFFC0C0C0) // Silver
-                                : (index == 2
-                                      ? const Color(0xFFCD7F32)
-                                      : Colors.grey[800])), // Bronze
-                      foregroundColor: Colors.black,
+                      backgroundColor: _getRankColor(index),
                       child: Text(
                         "${index + 1}",
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                        style: GoogleFonts.nunito(
+                          fontWeight: FontWeight.bold,
+                          color: index < 3 ? Colors.white : KeepUpApp.bgPurple,
+                        ),
                       ),
                     ),
                     title: Text(
                       isMe ? "${user.name} (You)" : user.name,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
+                      style: GoogleFonts.nunito(
+                        fontWeight: isMe ? FontWeight.bold : FontWeight.w600,
                         fontSize: 18,
+                        color: KeepUpApp.bgPurple,
                       ),
                     ),
                     trailing: Text(
                       "${user.xp} XP",
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFF00E676),
+                      style: GoogleFonts.nunito(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
+                        color: isMe
+                            ? KeepUpApp.bgPurple
+                            : const Color(0xFF00E676),
                       ),
                     ),
                   ),
@@ -144,5 +146,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               },
             ),
     );
+  }
+
+  Color _getRankColor(int index) {
+    if (index == 0) return const Color(0xFFFFD700); // Gold
+    if (index == 1) return const Color(0xFFC0C0C0); // Silver
+    if (index == 2) return const Color(0xFFCD7F32); // Bronze
+    return Colors.transparent;
   }
 }

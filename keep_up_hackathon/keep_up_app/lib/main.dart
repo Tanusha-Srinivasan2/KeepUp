@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/landing_page.dart';
-import 'services/auth_service.dart'; // <--- NEW IMPORT
+import 'screens/splash_screen.dart'; // Keep this import
 
 void main() async {
-  // <--- Changed to async
-  // 1. Required for async code in main
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 2. Register/Login the user before the app starts
-  await AuthService.loginOrRegister();
-
+  // REMOVED: await AuthService.loginOrRegister(); <--- We moved this!
   runApp(const KeepUpApp());
 }
 
 class KeepUpApp extends StatelessWidget {
   const KeepUpApp({super.key});
+
+  static const Color primaryYellow = Color(0xFFFFD700);
+  static const Color bgYellow = Color(0xFFFFF8B8);
+  static const Color bgPurple = Color(0xFF2A1B3D);
+  static const Color textColor = Color(0xFF2A1B3D);
 
   @override
   Widget build(BuildContext context) {
@@ -24,17 +23,29 @@ class KeepUpApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        // We use a dark, sleek theme for that "News" vibe
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFFEFCE0),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00E676), // Hacker Green
-          brightness: Brightness.dark,
-          surface: const Color(0xFF121212),
+          seedColor: primaryYellow,
+          brightness: Brightness.light,
+          primary: primaryYellow,
+          onPrimary: textColor,
         ),
-        textTheme: GoogleFonts.poppinsTextTheme(
+        textTheme: GoogleFonts.nunitoTextTheme(
           Theme.of(context).textTheme,
-        ).apply(bodyColor: Colors.white, displayColor: Colors.white),
+        ).apply(bodyColor: textColor, displayColor: textColor),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+          ),
+          iconTheme: IconThemeData(color: textColor),
+        ),
       ),
-      home: const LandingPage(),
+      home: const SplashScreen(),
     );
   }
 }
