@@ -4,14 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-// Navigation Imports
+// --- CLEAN IMPORTS ---
+import '../main.dart'; // Colors
+import '../widgets/voice_button.dart';
+import '../models/quiz_model.dart';
+
+// Screens
 import 'category_screen.dart';
 import 'leaderboard_screen.dart';
 import 'quiz_screen.dart';
-import 'catchup_screen.dart';
-import '../models/quiz_model.dart';
-import '../widgets/voice_button.dart';
-import '../main.dart'; // Import colors from main.dart
+import 'catchup_screen.dart'; // ✅ Correct Import
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -26,7 +28,7 @@ class _LandingPageState extends State<LandingPage> {
   String rank = "...";
   String streak = "...";
   bool isLoadingQuiz = false;
-  int _selectedIndex = 0; // For BottomNavigationBar
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -83,10 +85,11 @@ class _LandingPageState extends State<LandingPage> {
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Could not load quiz.")));
+      }
     } finally {
       if (mounted) setState(() => isLoadingQuiz = false);
     }
@@ -94,15 +97,12 @@ class _LandingPageState extends State<LandingPage> {
 
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
-    // Add navigation logic here for Explore and Profile tabs later
     if (index == 1) {
-      // Explore
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const CategoryScreen()),
       );
     } else if (index == 2) {
-      // Profile / Leaderboard
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const LeaderboardScreen()),
@@ -113,18 +113,15 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // GLOBAL VOICE ASSISTANT BUTTON
       floatingActionButton: const VoiceAssistantButton(),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerDocked, // Place it nicely
-      // TOP STATS BAR
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
       appBar: AppBar(
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _buildTopStat('assets/lightning.png', xp),
             _buildTopStat('assets/fire.png', streak),
-            // MAKE GEM CLICKABLE:
             _buildTopStat(
               'assets/gem.png',
               rank,
@@ -141,7 +138,6 @@ class _LandingPageState extends State<LandingPage> {
         ),
       ),
 
-      // MAIN CONTENT
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -150,16 +146,13 @@ class _LandingPageState extends State<LandingPage> {
             // 1. Welcome Section
             Row(
               children: [
-                // REAL MASCOT
                 Image.asset(
                   'assets/fox.png',
-                  width: 80, // Slightly smaller to fit better
+                  width: 80,
                   height: 80,
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(width: 15),
-
-                // TEXT COLUMN (Wrapped in Expanded to fix overflow stripes)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,8 +166,7 @@ class _LandingPageState extends State<LandingPage> {
                       ),
                       Text(
                         username,
-                        overflow: TextOverflow
-                            .ellipsis, // Adds "..." if name is too long
+                        overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                         style: GoogleFonts.nunito(
                           fontSize: 28,
@@ -192,7 +184,6 @@ class _LandingPageState extends State<LandingPage> {
             // 2. Main Cards Row
             Row(
               children: [
-                // Daily Challenge Card (Yellow)
                 Expanded(
                   child: _buildMainCard(
                     context,
@@ -206,7 +197,6 @@ class _LandingPageState extends State<LandingPage> {
                   ),
                 ),
                 const SizedBox(width: 20),
-                // Catch me Up Card (Purple)
                 Expanded(
                   child: _buildMainCard(
                     context,
@@ -215,6 +205,7 @@ class _LandingPageState extends State<LandingPage> {
                     bgColor: KeepUpApp.bgPurple,
                     textColor: Colors.white,
                     btnColor: Colors.white.withOpacity(0.2),
+                    // ✅ FIXED: Points to CatchUpScreen(), NOT CatchUpItem()
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -241,7 +232,6 @@ class _LandingPageState extends State<LandingPage> {
               context,
               title: "Local news",
               onTap: () {
-                // You can implement local news filtering later
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -254,7 +244,6 @@ class _LandingPageState extends State<LandingPage> {
         ),
       ),
 
-      // BOTTOM NAVIGATION BAR
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
@@ -273,10 +262,9 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // Widget Builder for Top Stats (Now Clickable!)
   Widget _buildTopStat(String imagePath, String value, {VoidCallback? onTap}) {
     return GestureDetector(
-      onTap: onTap, // Only works if we provide an action
+      onTap: onTap,
       child: Row(
         children: [
           Image.asset(imagePath, width: 24, height: 24),
@@ -293,7 +281,6 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // Widget Builder for Main Cards (Daily & CatchUp)
   Widget _buildMainCard(
     BuildContext context, {
     required String title,
@@ -372,7 +359,6 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // Widget Builder for Full Width Cards
   Widget _buildFullWidthCard(
     BuildContext context, {
     required String title,

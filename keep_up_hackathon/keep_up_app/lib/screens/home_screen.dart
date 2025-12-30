@@ -6,7 +6,7 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
-// Ensure these imports match your folder structure
+// Ensure this import points to your updated NewsCard model
 import '../models/news_model.dart';
 import '../widgets/voice_button.dart';
 
@@ -24,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = true;
   final FlutterTts flutterTts = FlutterTts();
 
-  // 1. Categories List (Matches your screenshots)
+  // 1. Categories List
   final List<String> _categories = [
     "All",
     "Technology",
@@ -91,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
         // Database Matching: Checks if DB 'topic' contains the category name
         if (category != "All") {
           allCards = allCards.where((c) {
-            // "Politics, Social" -> checks if it contains "Politics"
             return c.topic.toLowerCase().contains(category.toLowerCase());
           }).toList();
         }
@@ -121,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             _buildHeader(),
 
-            // THE SCROLLABLE CATEGORY TABS
+            // SCROLLABLE CATEGORY TABS
             _buildCategoryTabs(),
 
             const SizedBox(height: 10),
@@ -135,8 +134,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   : cards.isEmpty
                   ? _buildEmptyState()
                   : CardSwiper(
+                      // FIX: Dynamic cards count prevents "RangeError" crash
                       cardsCount: cards.length,
-                      numberOfCardsDisplayed: 2,
+                      numberOfCardsDisplayed: cards.length < 3
+                          ? cards.length
+                          : 3,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
                         vertical: 20,
@@ -151,18 +153,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 4. FIXED: Scrollable Category Tabs with Mouse Support
+  // 4. Scrollable Category Tabs with Mouse Support
   Widget _buildCategoryTabs() {
     return SizedBox(
-      height: 60, // Increased height to prevent clipping
+      height: 60,
       child: ScrollConfiguration(
-        // THIS IS THE FIX: Enables mouse dragging for emulators
         behavior: ScrollConfiguration.of(context).copyWith(
           dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
         ),
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          // Always allows scrolling physics
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 24),
           itemCount: _categories.length,
@@ -221,6 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
             "No news found for ${_categories[_selectedCategoryIndex]}.",
             style: GoogleFonts.poppins(color: Colors.black54),
           ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () => fetchNews(_categories[_selectedCategoryIndex]),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text("Refresh"),
+          ),
         ],
       ),
     );
@@ -234,7 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              // Back Button logic
               IconButton(
                 icon: const Icon(
                   Icons.arrow_back_ios,
@@ -279,7 +284,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
     final cardColor = cardColors[index % cardColors.length];
 
-    // Clean up topic string (remove commas)
     String displayTopic = card.topic.contains(',')
         ? card.topic.split(',')[0].trim()
         : card.topic;
@@ -304,14 +308,17 @@ class _HomeScreenState extends State<HomeScreen> {
             flex: 5,
             child: Container(
               width: double.infinity,
-              decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(30),
+                ),
                 image: DecorationImage(
-                  // Use card.imageUrl if available, otherwise this placeholder
-                  image: NetworkImage(
-                    "https://images.unsplash.com/photo-1507413245164-6160d8298b31?q=80&w=1000&auto=format&fit=crop",
-                  ),
+                  // FIX: Use the actual image URL from the card
+                  image: NetworkImage(card.imageUrl),
                   fit: BoxFit.cover,
+                  onError: (exception, stackTrace) {
+                    // Fallback handled by Image widget or error builder if needed
+                  },
                 ),
               ),
               child: Stack(
@@ -367,22 +374,22 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // TITLE (Headline)
                   Text(
-                    card.topic.length > 50
-                        ? "${card.topic.substring(0, 50)}..."
-                        : card.topic,
+                    card.title, // Use the real title now
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFF1F1F1F),
                       height: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
+                  // DESCRIPTION (Summary)
                   Text(
-                    card.contentLine,
+                    card.description, // Use the real description
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -402,16 +409,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               children: [
                 _iconWithAction(Icons.access_time, () {}),
+                const SizedBox(width: 5),
+                Text(
+                  card.time,
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ), // Show Time
                 const SizedBox(width: 15),
                 _iconWithAction(Icons.sentiment_satisfied_alt, () {}),
-                const SizedBox(width: 15),
-                _iconWithAction(Icons.public, () {}),
                 const Spacer(),
                 _iconWithAction(Icons.bookmark_border, () {}),
                 const SizedBox(width: 15),
                 _iconWithAction(
                   Icons.volume_up_outlined,
-                  () => _speak(card.contentLine),
+                  () => _speak("${card.title}. ${card.description}"),
                 ),
               ],
             ),

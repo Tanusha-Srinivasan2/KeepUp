@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../models/catchup_model.dart';
-import '../widgets/voice_button.dart';
+import '../models/catchup_model.dart'; // Make sure this path is correct
 
 class CatchUpScreen extends StatefulWidget {
   const CatchUpScreen({super.key});
@@ -16,7 +14,6 @@ class CatchUpScreen extends StatefulWidget {
 class _CatchUpScreenState extends State<CatchUpScreen> {
   List<CatchUpItem> items = [];
   bool isLoading = true;
-  final FlutterTts flutterTts = FlutterTts();
 
   @override
   void initState() {
@@ -42,112 +39,109 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
     }
   }
 
-  Future<void> _speak(String text) async {
-    await flutterTts.setLanguage("en-US");
-    await flutterTts.speak(text);
-  }
-
-  @override
-  void dispose() {
-    flutterTts.stop();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      floatingActionButton: const VoiceAssistantButton(),
-      appBar: AppBar(
-        title: Text(
-          "Quick Catch Up",
-          style: GoogleFonts.poppins(color: Colors.white),
-        ),
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
+      backgroundColor: const Color(0xFFFFF9E5),
+      body: SafeArea(
+        child: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: Colors.orange),
+              )
+            : Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      itemCount: items.length,
+                      itemBuilder: (ctx, i) => _buildCard(items[i]),
+                    ),
+                  ),
+                ],
+              ),
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00E676)),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 20),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey[800]!),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.5),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00E676).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              item.timeAgo.toUpperCase(),
-                              style: GoogleFonts.poppins(
-                                color: const Color(0xFF00E676),
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.volume_up,
-                              color: Colors.grey,
-                            ),
-                            onPressed: () =>
-                                _speak("${item.headline}. ${item.summary}"),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        item.headline,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        item.summary,
-                        style: GoogleFonts.poppins(
-                          color: Colors.grey[400],
-                          fontSize: 14,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+              Text(
+                "Catch Up!",
+                style: GoogleFonts.poppins(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Mascot Image
+          Center(
+            child: Image.network(
+              "https://cdn-icons-png.flaticon.com/512/4712/4712035.png", // Cute Fox Icon
+              height: 120,
+              errorBuilder: (c, e, s) =>
+                  const Icon(Icons.pets, size: 80, color: Colors.orange),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard(CatchUpItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.article, color: Colors.orange), // Simple Icon
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.headline,
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  item.summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
