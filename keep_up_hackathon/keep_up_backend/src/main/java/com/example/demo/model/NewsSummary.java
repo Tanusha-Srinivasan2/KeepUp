@@ -6,12 +6,12 @@ public class NewsSummary {
     private String id;           // usually the date, e.g., "2025-10-27-US"
     private String region;       // e.g., "US", "India"
     private Timestamp createdAt; // When this was generated
-    private List<ToonSegment> segments; // The list of structured news items
+    private List<Toon> segments; // The list of structured news items
 
     // Empty constructor for Firestore
     public NewsSummary() {}
 
-    public NewsSummary(String id, String region, List<ToonSegment> segments) {
+    public NewsSummary(String id, String region, List<Toon> segments) {
         this.id = id;
         this.region = region;
         this.segments = segments;
@@ -28,6 +28,6 @@ public class NewsSummary {
     public Timestamp getCreatedAt() { return createdAt; }
     public void setCreatedAt(Timestamp createdAt) { this.createdAt = createdAt; }
 
-    public List<ToonSegment> getSegments() { return segments; }
-    public void setSegments(List<ToonSegment> segments) { this.segments = segments; }
+    public List<Toon> getSegments() { return segments; }
+    public void setSegments(List<Toon> segments) { this.segments = segments; }
 }

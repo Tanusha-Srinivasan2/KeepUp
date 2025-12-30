@@ -1,6 +1,6 @@
 package com.example.demo.service;
 
-import com.example.demo.model.ToonSegment;
+import com.example.demo.model.Toon;
 import com.google.cloud.firestore.Firestore;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +17,7 @@ public class FirestoreService {
     }
 
     // METHOD 1: Save a single news segment (Fixes your error!)
-    public void saveToonSegment(ToonSegment segment) {
+    public void saveToonSegment(Toon segment) {
         try {
             // NOTE: Using "toon_index" to match your database screenshot
             db.collection("toon_index")
@@ -30,10 +30,10 @@ public class FirestoreService {
     }
 
     // METHOD 2: Get all segments (For the Chatbot)
-    public List<ToonSegment> getAllToonSegments() {
+    public List<Toon> getAllToonSegments() {
         try {
             var query = db.collection("toon_index").get();
-            return query.get().toObjects(ToonSegment.class);
+            return query.get().toObjects(Toon.class);
         } catch (Exception e) {
             e.printStackTrace();
             return List.of();

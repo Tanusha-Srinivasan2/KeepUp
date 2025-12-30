@@ -40,7 +40,7 @@ public class VertexAiConfig {
         return VertexAiGeminiChatModel.builder()
                 .vertexAI(vertexAI)
                 .defaultOptions(VertexAiGeminiChatOptions.builder()
-                        .model("gemini-1.5-pro")
+                        .model("gemini-2.5-flash")
                         .temperature(0.4)
                         .build())
                 .build();
