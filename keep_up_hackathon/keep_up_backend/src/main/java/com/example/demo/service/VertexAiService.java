@@ -109,21 +109,24 @@ public class VertexAiService {
         )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }
 
-    // PHASE 4: Chat Assistant
+    // PHASE 4: Chat Assistant (HYBRID MODE: Context + Google Search)
     public String chatWithNews(String userQuestion, String newsContext) {
         String systemPrompt = """
             You are 'KeepUp', a smart AI assistant.
+            
             INSTRUCTIONS:
-            1. Use the provided 'News Context' to answer current event questions.
-            2. If the user asks general questions (e.g., "Hi", "Joke"), answer directly.
-            3. Keep answers under 3 lines.
+            1. PRIORITY: Check the 'NEWS CONTEXT' below. If the answer is there, use it.
+            2. FALLBACK: If the answer is NOT in the context, use your General Knowledge and Google Search to answer.
+            3. DO NOT say "I don't know" or "It's not in the context". Always provide an answer.
+            4. Keep answers under 3 lines.
             
             NEWS CONTEXT:
             """ + newsContext;
 
         return chatModel.call(new Prompt(systemPrompt + "\nUser: " + userQuestion,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
+                        .model("gemini-2.5-flash") // ✅ FIXED
+                        .googleSearchRetrieval(true) // ✅ ADDED: Enables fallback search
                         .build()
         )).getResult().getOutput().getText();
     }
