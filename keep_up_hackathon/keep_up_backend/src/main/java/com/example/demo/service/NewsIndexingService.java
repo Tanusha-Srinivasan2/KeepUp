@@ -19,39 +19,53 @@ import java.util.concurrent.ExecutionException;
 public class NewsIndexingService {
 
     private final ObjectMapper objectMapper;
-    // ✅ FIX: Use "toon_index" to match your database screenshot
     private static final String COLLECTION_NAME = "toon_index";
 
     public NewsIndexingService() {
         this.objectMapper = new ObjectMapper();
     }
 
-    // 1. Process and Save (Gemini -> DB)
-    public void processAndSave(String jsonOutput) {
+    // ✅ 1. Process and Save (Now accepts optional dateOverride)
+    public void processAndSave(String jsonOutput, String dateOverride) {
         try {
             String cleanJson = jsonOutput.replace("```json", "").replace("```", "").trim();
             List<Toon> newToons = objectMapper.readValue(cleanJson, new TypeReference<List<Toon>>() {});
 
             Firestore db = FirestoreClient.getFirestore();
-            String todayDate = LocalDate.now().toString();
-            long nowTimestamp = System.currentTimeMillis();
+
+            // Logic: Use override if provided, otherwise Today
+            String targetDate;
+            long timestamp;
+
+            if (dateOverride != null && !dateOverride.isEmpty()) {
+                targetDate = dateOverride;
+                // Create a dummy timestamp for that day
+                timestamp = java.sql.Date.valueOf(targetDate).getTime();
+            } else {
+                targetDate = LocalDate.now().toString();
+                timestamp = System.currentTimeMillis();
+            }
 
             for (Toon toon : newToons) {
                 if (toon.getId() == null || toon.getId().isEmpty()) {
                     toon.setId(UUID.randomUUID().toString());
                 }
-                // Auto-stamp date
-                toon.setPublishedDate(todayDate);
-                toon.setTimestamp(nowTimestamp);
+
+                // Apply the date
+                toon.setPublishedDate(targetDate);
+                toon.setTimestamp(timestamp);
 
                 db.collection(COLLECTION_NAME).document(toon.getId()).set(toon);
+                System.out.println("✅ Saved Toon: " + toon.getTitle() + " [" + targetDate + "]");
             }
+
         } catch (Exception e) {
+            System.err.println("❌ Error processing news JSON: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    // ✅ 2. FETCH NEWS (Logic moved here!)
+    // ✅ 2. Fetch News (Supports Date Filtering)
     public List<Toon> getAllNewsSegments(String dateFilter) {
         List<Toon> newsList = new ArrayList<>();
         Firestore db = FirestoreClient.getFirestore();
@@ -60,11 +74,11 @@ public class NewsIndexingService {
             Query query;
 
             if (dateFilter != null && !dateFilter.isEmpty()) {
-                // 🗓️ FILTER: Get news for specific date
+                // Filter by specific date
                 System.out.println("🔎 Filtering for date: " + dateFilter);
                 query = db.collection(COLLECTION_NAME).whereEqualTo("publishedDate", dateFilter);
             } else {
-                // ⚡ DEFAULT: Sort by Newest First
+                // Default: Sort by Newest
                 query = db.collection(COLLECTION_NAME)
                         .orderBy("timestamp", Query.Direction.DESCENDING)
                         .limit(50);

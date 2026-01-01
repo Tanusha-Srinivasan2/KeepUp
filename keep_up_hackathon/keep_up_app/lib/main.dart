@@ -1,23 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/splash_screen.dart'; // Keep this import
+import 'package:firebase_core/firebase_core.dart'; // ✅ Import Firebase
+import 'package:shared_preferences/shared_preferences.dart';
+
+// Screens
+import 'screens/landing_page.dart';
+import 'screens/auth_screen.dart'; // Make sure this file exists from previous step!
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // REMOVED: await AuthService.loginOrRegister(); <--- We moved this!
+
+  // ✅ Initialize Firebase
+  // If you haven't generated firebase_options.dart, make sure google-services.json is in android/app/
+  await Firebase.initializeApp();
+
   runApp(const KeepUpApp());
 }
 
-class KeepUpApp extends StatelessWidget {
+class KeepUpApp extends StatefulWidget {
   const KeepUpApp({super.key});
 
+  // Keep your specific colors
   static const Color primaryYellow = Color(0xFFFFD700);
   static const Color bgYellow = Color(0xFFFFF8B8);
   static const Color bgPurple = Color(0xFF2A1B3D);
   static const Color textColor = Color(0xFF2A1B3D);
 
   @override
+  State<KeepUpApp> createState() => _KeepUpAppState();
+}
+
+class _KeepUpAppState extends State<KeepUpApp> {
+  bool _isLoggedIn = false;
+  bool _checkingAuth = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  // ✅ Check if user_id exists in storage
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? userId = prefs.getString('user_id');
+
+    setState(() {
+      _isLoggedIn = userId != null && userId.isNotEmpty;
+      _checkingAuth = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_checkingAuth) {
+      // Show a simple white screen while checking auth
+      return const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(color: KeepUpApp.primaryYellow),
+          ),
+        ),
+      );
+    }
+
     return MaterialApp(
       title: 'Keep Up',
       debugShowCheckedModeBanner: false,
@@ -26,26 +72,29 @@ class KeepUpApp extends StatelessWidget {
         brightness: Brightness.light,
         scaffoldBackgroundColor: const Color(0xFFFEFCE0),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: primaryYellow,
+          seedColor: KeepUpApp.primaryYellow,
           brightness: Brightness.light,
-          primary: primaryYellow,
-          onPrimary: textColor,
+          primary: KeepUpApp.primaryYellow,
+          onPrimary: KeepUpApp.textColor,
         ),
-        textTheme: GoogleFonts.nunitoTextTheme(
-          Theme.of(context).textTheme,
-        ).apply(bodyColor: textColor, displayColor: textColor),
+        textTheme: GoogleFonts.nunitoTextTheme(Theme.of(context).textTheme)
+            .apply(
+              bodyColor: KeepUpApp.textColor,
+              displayColor: KeepUpApp.textColor,
+            ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           titleTextStyle: TextStyle(
-            color: textColor,
+            color: KeepUpApp.textColor,
             fontWeight: FontWeight.bold,
           ),
-          iconTheme: IconThemeData(color: textColor),
+          iconTheme: IconThemeData(color: KeepUpApp.textColor),
         ),
       ),
-      home: const SplashScreen(),
+      // ✅ Routing Logic: Login vs Home
+      home: _isLoggedIn ? const LandingPage() : const AuthScreen(),
     );
   }
 }

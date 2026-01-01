@@ -27,17 +27,16 @@ public class CatchUpService {
 
     public List<Map<String, Object>> getWeeklyCatchUp(String region) throws Exception {
 
-        // 1. BACKFILL: Ensure summaries exist for the last 3 days
-        // (So your list isn't empty for the demo)
+        // 1. BACKFILL: Ensure summaries exist for last 3 days
         for (int i = 0; i < 3; i++) {
             String targetDate = LocalDate.now().minusDays(i).toString();
             ensureSummaryExistsForDate(targetDate, region);
         }
 
-        // 2. FETCH: Get all summaries from DB (Sorted Newest First)
+        // 2. FETCH: Get summaries sorted by date desc
         List<QueryDocumentSnapshot> docs = db.collection("daily_catchup")
                 .orderBy("date", Query.Direction.DESCENDING)
-                .limit(7) // Show up to 7 days
+                .limit(7)
                 .get().get().getDocuments();
 
         // 3. BUILD RESPONSE
@@ -47,50 +46,49 @@ public class CatchUpService {
             Map<String, Object> dayMap = new HashMap<>();
             dayMap.put("date", doc.getString("date"));
 
-            // Parse stored JSON string back to Object
             String jsonContent = doc.getString("jsonContent");
+            // Only add if content is valid
             if (jsonContent != null && !jsonContent.equals("[]")) {
                 Object summaryObj = objectMapper.readValue(jsonContent, List.class);
                 dayMap.put("summary", summaryObj);
                 responseList.add(dayMap);
             }
         }
-
         return responseList;
     }
 
-    // Helper: Checks if summary exists for a specific date; if not, generates it.
     private void ensureSummaryExistsForDate(String date, String region) throws ExecutionException, InterruptedException {
         String docId = "summary_" + date;
 
-        // A. Check Cache
+        // Check if summary already exists
         if (db.collection("daily_catchup").document(docId).get().get().exists()) {
-            return; // Already exists, skip.
-        }
-
-        System.out.println("⚡ Attempting to generate Summary for: " + date);
-
-        // B. Fetch News STRICTLY for this date
-        List<Toon> dailyNews = newsIndexingService.getAllNewsSegments(date);
-
-        // ❌ REMOVED FALLBACK: If no news for this date, we do NOT fetch generic news.
-        if (dailyNews.isEmpty()) {
-            System.out.println("⚠️ No news found for " + date + ". Skipping summary.");
             return;
         }
 
-        // C. Prepare AI Context
+        System.out.println("⚡ Generating Summary for: " + date);
+
+        // ✅ 1. STRICT FETCH: Only get news that matches this 'date' exactly
+        // (Make sure your NewsIndexingService.getAllNewsSegments accepts a date param!)
+        List<Toon> dailyNews = newsIndexingService.getAllNewsSegments(date);
+
+        if (dailyNews.isEmpty()) {
+            System.out.println("⚠️ No news found for " + date + ". Cannot generate summary.");
+            return;
+        }
+
+        // 2. Build Context for the AI
         StringBuilder contextBuilder = new StringBuilder();
-        contextBuilder.append("DATE: ").append(date).append("\n"); // Tell AI the date
+        contextBuilder.append("EVENTS FOR DATE: ").append(date).append("\n");
+        contextBuilder.append("INSTRUCTIONS: Summarize ONLY these specific events.\n");
 
         for (Toon t : dailyNews) {
             contextBuilder.append(String.format("- %s: %s\n", t.getTitle(), t.getDescription()));
         }
 
-        // D. Generate with AI
+        // 3. Generate Summary
         String generatedJson = vertexAiService.generateCatchUpContent(contextBuilder.toString());
 
-        // E. Save to DB
+        // 4. Save to Database
         if (generatedJson != null && generatedJson.length() > 10) {
             Map<String, Object> data = new HashMap<>();
             data.put("date", date);
@@ -101,5 +99,6 @@ public class CatchUpService {
             db.collection("daily_catchup").document(docId).set(data);
             System.out.println("💾 Saved summary for " + date);
         }
+
     }
 }

@@ -4,6 +4,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.vertexai.gemini.VertexAiGeminiChatOptions;
 import org.springframework.stereotype.Service;
+import java.time.LocalDate;
 
 @Service
 public class VertexAiService {
@@ -14,15 +15,18 @@ public class VertexAiService {
         this.chatModel = chatModel;
     }
 
-    // PHASE 1: The Researcher (Now with Google Search Grounding)
-    public String researchNews(String region) {
+    // ✅ PHASE 1: UPDATED (Accepts 'date' to prevent overlaps)
+    public String researchNews(String region, String date) {
+        // If no date provided, use today.
+        String targetDate = (date != null && !date.isEmpty()) ? date : LocalDate.now().toString();
+
         String prompt = """
         Role: Chief Editor of KeepUp News.
-        Task: Curate the Top 5 most impactful stories from the LAST 24 HOURS in %s.
+        Task: Curate the Top 5 most impactful stories specifically for the date: %s in %s.
         
         QUALITY GATE RULES:
-        1. IMPACT: Must affect >1 million people or major markets.
-        2. RECENCY: Must be published within the last 24 hours.
+        1. STRICT DATE MATCH: Only include events that happened on %s. Do NOT include news from today if the date is in the past.
+        2. IMPACT: Must affect >1 million people or major markets.
         3. CREDIBILITY: Must be verified by major sources (e.g., Reuters, AP, Bloomberg).
         4. CATEGORIES: Select exactly 1 story for: Technology, Sports, Politics, Business, and Science.
         
@@ -30,18 +34,17 @@ public class VertexAiService {
         - Provide ONLY a brief summary of core facts for each story.
         - DO NOT pull full articles or long transcripts.
         - List the facts as bullet points for each category.
-        """.formatted(region);
+        """.formatted(targetDate, region, targetDate);
 
-        // FIX: Using "gemini-1.5-flash" & googleSearchRetrieval (No "with")
         return chatModel.call(new Prompt(prompt,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .googleSearchRetrieval(true) // FIX: Removed "with"
+                        .model("gemini-2.5-flash") // Updated to latest model if available, or keep 1.5-flash
+                        .googleSearchRetrieval(true)
                         .build()
         )).getResult().getOutput().getText();
     }
 
-    // PHASE 2: The Formatter (Now requests fields for Flutter Cards)
+    // PHASE 2: The Formatter (Unchanged)
     public String formatToToonJson(String rawFacts) {
         String prompt = """
             You are a backend API. Convert the following news facts into a strict JSON list of 5 items.
@@ -76,13 +79,13 @@ public class VertexAiService {
 
         return chatModel.call(new Prompt(prompt,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .temperature(0.2) // Low temp for strict JSON
+                        .model("gemini-2.5-flash") // Changed back to stable 1.5 if 2.5 errors
+                        .temperature(0.2)
                         .build()
         )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }
 
-    // PHASE 3: Daily Quiz
+    // PHASE 3: Daily Quiz (Unchanged)
     public String generateQuizFromNews(String rawFacts) {
         String prompt = """
             Create a Daily Quiz of 3 questions based on these news facts.
@@ -109,7 +112,7 @@ public class VertexAiService {
         )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }
 
-    // PHASE 4: Chat Assistant (HYBRID MODE: Context + Google Search)
+    // PHASE 4: Chat Assistant (Unchanged)
     public String chatWithNews(String userQuestion, String newsContext) {
         String systemPrompt = """
             You are 'KeepUp', a smart AI assistant.
@@ -125,13 +128,13 @@ public class VertexAiService {
 
         return chatModel.call(new Prompt(systemPrompt + "\nUser: " + userQuestion,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash") // ✅ FIXED
-                        .googleSearchRetrieval(true) // ✅ ADDED: Enables fallback search
+                        .model("gemini-2.5-flash")
+                        .googleSearchRetrieval(true)
                         .build()
         )).getResult().getOutput().getText();
     }
 
-    // PHASE 5: Catch Up / Recap Generation
+    // PHASE 5: Catch Up / Recap Generation (Unchanged)
     public String generateCatchUpContent(String databaseNews) {
         String prompt = """
             You are a News Recap Assistant.
@@ -158,9 +161,8 @@ public class VertexAiService {
 
         return chatModel.call(new Prompt(prompt,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash") // FIXED: 2.5 -> 1.5
+                        .model("gemini-2.5-flash")
                         .temperature(0.5)
-                        // REMOVED: .googleSearchRetrieval(true) -> No longer needed
                         .build()
         )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }

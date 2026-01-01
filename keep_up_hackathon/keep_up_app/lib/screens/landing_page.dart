@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:google_sign_in/google_sign_in.dart'; // For Logout
 
 import '../main.dart'; // Colors
 import '../models/quiz_model.dart';
@@ -15,6 +16,7 @@ import 'leaderboard_screen.dart';
 import 'quiz_screen.dart';
 import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
+import 'auth_screen.dart'; // Required for Redirects
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -24,14 +26,14 @@ class LandingPage extends StatefulWidget {
 }
 
 class _LandingPageState extends State<LandingPage> {
-  String username = "Hacker";
+  String username = "Reader";
   String xp = "...";
   String rank = "...";
   String streak = "...";
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
-  // ✅ 1. VOICE ASSISTANT VARIABLES
+  // Voice Variables
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -50,7 +52,123 @@ class _LandingPageState extends State<LandingPage> {
     super.dispose();
   }
 
-  // ✅ 2. CHAT MODAL LOGIC (The Fox's Brain)
+  // ✅ 1. LOGOUT FUNCTION
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Clear local storage
+    await GoogleSignIn().signOut(); // Sign out of Google
+
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const AuthScreen()),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+
+  // ✅ 2. FETCH USER DATA (Redirects if missing)
+  Future<void> _fetchUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? userId = prefs.getString('user_id');
+    String? storedName = prefs.getString('user_name');
+
+    // Security Check: If no ID, go to Login
+    if (userId == null) {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const AuthScreen()),
+        );
+      }
+      return;
+    }
+
+    setState(() => username = storedName ?? "Reader");
+
+    try {
+      final url = Uri.parse('http://10.0.2.2:8080/api/news/user/$userId');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            xp = (data['xp'] ?? 0).toString();
+            rank = (data['rank'] ?? 0).toString();
+            streak = (data['streak'] ?? 1).toString();
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading stats: $e");
+    }
+  }
+
+  // ✅ 3. EDIT USERNAME LOGIC
+  void _showEditNameDialog() {
+    TextEditingController nameController = TextEditingController(
+      text: username,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            "Change Username",
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+          ),
+          content: TextField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: "New Username",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: KeepUpApp.primaryYellow,
+              ),
+              onPressed: () async {
+                String newName = nameController.text.trim();
+                if (newName.isNotEmpty) {
+                  await _updateNameInBackend(newName);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text("Save", style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updateNameInBackend(String newName) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? userId = prefs.getString('user_id');
+    if (userId == null) return;
+
+    // Optimistic Update
+    setState(() => username = newName);
+    await prefs.setString('user_name', newName);
+
+    try {
+      final url = Uri.parse(
+        'http://10.0.2.2:8080/api/news/user/updateName?userId=$userId&newName=$newName',
+      );
+      await http.post(url);
+    } catch (e) {
+      print("Error updating name: $e");
+    }
+  }
+
+  // --- CHAT MODAL LOGIC ---
   void _showChatModal() {
     showModalBottomSheet(
       context: context,
@@ -72,7 +190,6 @@ class _LandingPageState extends State<LandingPage> {
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -96,8 +213,6 @@ class _LandingPageState extends State<LandingPage> {
                 ],
               ),
               const Divider(),
-
-              // Status Text
               Expanded(
                 child: Center(
                   child: _isThinking
@@ -124,8 +239,6 @@ class _LandingPageState extends State<LandingPage> {
                         ),
                 ),
               ),
-
-              // Mic Button
               GestureDetector(
                 onTapDown: (_) async {
                   bool available = await _speech.initialize();
@@ -140,8 +253,7 @@ class _LandingPageState extends State<LandingPage> {
                               _isThinking = true;
                             });
                             await _askAI(val.recognizedWords);
-                            if (mounted)
-                              Navigator.pop(context); // Close after asking
+                            if (mounted) Navigator.pop(context);
                           }
                         }
                       },
@@ -175,49 +287,19 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   Future<void> _askAI(String question) async {
-    // Calls your General Chat Endpoint (which searches all news)
     final url = Uri.parse(
       'http://10.0.2.2:8080/api/news/chat?question=$question',
     );
     try {
       final response = await http.get(url);
-      if (response.statusCode == 200) {
-        await flutterTts.speak(response.body);
-      }
+      if (response.statusCode == 200) await flutterTts.speak(response.body);
     } catch (e) {
       print("AI Error: $e");
       await flutterTts.speak("Sorry, I'm having trouble connecting.");
     }
   }
 
-  // --- EXISTING LOGIC ---
-
-  Future<void> _fetchUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? userId = prefs.getString('user_id');
-    String? storedName = prefs.getString('user_name');
-    if (userId == null) return;
-
-    setState(() => username = storedName ?? "Hacker");
-
-    try {
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/user/$userId');
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (mounted) {
-          setState(() {
-            xp = data['xp'].toString();
-            rank = data['rank'].toString();
-            streak = data['streak'].toString();
-          });
-        }
-      }
-    } catch (e) {
-      print("Error loading stats: $e");
-    }
-  }
-
+  // ✅ 4. START QUIZ (With Auto-Refresh)
   Future<void> _startQuiz() async {
     setState(() => isLoadingQuiz = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -231,78 +313,91 @@ class _LandingPageState extends State<LandingPage> {
         final List<QuizQuestion> questions = quizData
             .map((q) => QuizQuestion.fromJson(q))
             .toList();
+
         if (mounted) {
-          Navigator.push(
+          // Wait for quiz to finish
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => QuizScreen(questions: questions),
             ),
           );
+          // Refresh stats immediately
+          _fetchUserData();
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Could not load quiz.")));
-      }
     } finally {
       if (mounted) setState(() => isLoadingQuiz = false);
     }
   }
 
-  void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
+  // ✅ 5. BOTTOM NAV (With Auto-Refresh for Leaderboard)
+  void _onItemTapped(int index) async {
     if (index == 1) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const CategoryScreen()),
       );
     } else if (index == 2) {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const LeaderboardScreen()),
       );
+      // Refresh rank on return
+      _fetchUserData();
+    } else {
+      setState(() => _selectedIndex = index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ✅ 3. REMOVED floatingActionButton (Green Mic)
       appBar: AppBar(
+        // Logout Button
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.brown),
+            tooltip: 'Logout',
+            onPressed: _logout,
+          ),
+        ],
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _buildTopStat('assets/lightning.png', xp),
             _buildTopStat('assets/fire.png', streak),
+            // Rank Icon (Updates on Return)
             _buildTopStat(
               'assets/gem.png',
               rank,
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const LeaderboardScreen(),
                   ),
                 );
+                _fetchUserData();
               },
             ),
           ],
         ),
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Welcome Section
             Row(
               children: [
-                // ✅ 4. WRAPPED FOX IN GESTURE DETECTOR
                 GestureDetector(
-                  onTap: _showChatModal, // Clicking Fox opens Chat
+                  onTap: _showChatModal,
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
@@ -334,15 +429,31 @@ class _LandingPageState extends State<LandingPage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Text(
-                        username,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: GoogleFonts.nunito(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: KeepUpApp.primaryYellow,
-                        ),
+                      // Editable Name
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              username,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.nunito(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: KeepUpApp.primaryYellow,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _showEditNameDialog,
+                            child: const Icon(
+                              Icons.edit,
+                              size: 18,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -350,8 +461,6 @@ class _LandingPageState extends State<LandingPage> {
               ],
             ),
             const SizedBox(height: 30),
-
-            // 2. Main Cards Row
             Row(
               children: [
                 Expanded(
@@ -386,8 +495,6 @@ class _LandingPageState extends State<LandingPage> {
               ],
             ),
             const SizedBox(height: 30),
-
-            // 3. Full Width Cards
             _buildFullWidthCard(
               context,
               title: "Explore today's top news",
@@ -397,23 +504,19 @@ class _LandingPageState extends State<LandingPage> {
               ),
             ),
             const SizedBox(height: 20),
-
             _buildFullWidthCard(
               context,
               title: "Your Bookmarks",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const BookmarksScreen(),
-                  ),
-                );
-              },
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BookmarksScreen(),
+                ),
+              ),
             ),
           ],
         ),
       ),
-
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
@@ -432,7 +535,6 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // ... (Helper widgets remain unchanged)
   Widget _buildTopStat(String imagePath, String value, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../models/catchup_model.dart';
+import 'package:intl/intl.dart';
 
 class CatchUpScreen extends StatefulWidget {
   const CatchUpScreen({super.key});
@@ -12,7 +12,7 @@ class CatchUpScreen extends StatefulWidget {
 }
 
 class _CatchUpScreenState extends State<CatchUpScreen> {
-  List<CatchUpItem> items = [];
+  List<dynamic> weeklySummaries = [];
   bool isLoading = true;
 
   @override
@@ -22,15 +22,12 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
   }
 
   Future<void> fetchCatchUp() async {
+    final url = Uri.parse('http://10.0.2.2:8080/api/news/catchup');
     try {
-      // Use correct IP for emulator vs real device
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/catchup?region=US');
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
         setState(() {
-          items = data.map((e) => CatchUpItem.fromJson(e)).toList();
+          weeklySummaries = json.decode(response.body);
           isLoading = false;
         });
       } else {
@@ -45,123 +42,63 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5), // Light cream background
-      body: SafeArea(
-        child: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFDE047)),
-              )
-            : Column(
-                children: [
-                  _buildHeaderSection(),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        return _buildCatchUpCard(items[index]);
-                      },
-                    ),
-                  ),
-                  _buildBottomButton(),
-                ],
-              ),
+      // ✅ 1. THEME BACKGROUND (Cream)
+      backgroundColor: const Color(0xFFFFF9E5),
+
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "Your Daily Recap",
+          style: GoogleFonts.poppins(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-    );
-  }
 
-  // Header with Back Button, Title, Mascot, and Calendar
-  Widget _buildHeaderSection() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(
-                  Icons.arrow_back_ios,
-                  color: Colors.black,
-                  size: 24,
-                ),
+      // ✅ 2. THEME LOADER (Orange)
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+          : weeklySummaries.isEmpty
+          ? Center(
+              child: Text(
+                "No summaries available yet.",
+                style: GoogleFonts.poppins(color: Colors.black54),
               ),
-              Text(
-                "Catch Up!",
-                style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Mascot & Calendar Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // ✅ CHANGE MADE HERE: Using your local asset fox
-              Image.asset('assets/fox.png', height: 120, fit: BoxFit.contain),
-              const SizedBox(width: 30),
-              // Calendar Icon
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(
-                    Icons.calendar_today,
-                    size: 100,
-                    color: Colors.grey,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 18.0),
-                    child: Text(
-                      "${DateTime.now().day}", // Current Day
-                      style: GoogleFonts.poppins(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 30),
-          Text(
-            "Here's what you missed:",
-            style: GoogleFonts.poppins(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(20),
+              itemCount: weeklySummaries.length,
+              itemBuilder: (context, index) {
+                return _buildDayBox(weeklySummaries[index]);
+              },
             ),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ),
     );
   }
 
-  // The new, more readable card design
-  Widget _buildCatchUpCard(CatchUpItem item) {
+  Widget _buildDayBox(Map<String, dynamic> dayData) {
+    String dateStr = dayData['date'];
+    List<dynamic> summaries = dayData['summary'];
+
+    DateTime date = DateTime.parse(dateStr);
+    String formattedDate = DateFormat('EEEE, MMM d').format(date);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(24), // Increased padding
+      margin: const EdgeInsets.only(bottom: 25),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 15,
+            // ✅ 3. SUBTLE SHADOW
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
             offset: const Offset(0, 5),
           ),
         ],
@@ -169,112 +106,83 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Topic Tag & Date Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _getTopicColor(item.topic).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+                  // ✅ 4. HEADER ICON BG (Light Orange)
+                  color: Colors.orange.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
-                child: Text(
-                  item.topic.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: _getTopicColor(item.topic),
-                  ),
+                child: const Icon(
+                  Icons.calendar_today,
+                  // ✅ 5. ICON COLOR (Orange)
+                  color: Colors.orange,
+                  size: 20,
                 ),
               ),
+              const SizedBox(width: 10),
               Text(
-                item.date,
+                formattedDate,
                 style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontStyle: FontStyle.italic,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  // ✅ 6. HEADER TEXT (Dark Grey/Black)
+                  color: const Color(0xFF2D2D2D),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Headline (Larger & Darker)
-          Text(
-            item.headline,
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Summary (Darker, No Cutoff)
-          Text(
-            item.summary,
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              color: Colors.grey[800], // Darker grey for better readability
-              height: 1.5,
-            ),
-          ),
+          const Divider(height: 30),
+          ...summaries.map((item) => _buildSummaryItem(item)),
         ],
       ),
     );
   }
 
-  // The main action button at the bottom
-  Widget _buildBottomButton() {
+  Widget _buildSummaryItem(Map<String, dynamic> item) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
-      child: SizedBox(
-        width: double.infinity,
-        height: 60,
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFDE047), // Bright Yellow
-            foregroundColor: Colors.black,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
+      padding: const EdgeInsets.only(bottom: 15.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 8, right: 12),
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              // ✅ 7. BULLET POINT (Orange)
+              color: Colors.orange,
+              shape: BoxShape.circle,
             ),
           ),
-          child: Text(
-            "VIEW FULL NEWS FEED",
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['title'] ?? "News",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item['description'] ?? "",
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: const Color(0xFF4B5563), // Cool Grey
+                    height: 1.5,
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
+        ],
       ),
     );
-  }
-
-  // Helper to pick a color based on topic
-  Color _getTopicColor(String topic) {
-    switch (topic.toLowerCase()) {
-      case 'science':
-        return Colors.blue;
-      case 'business':
-        return Colors.green;
-      case 'sports':
-        return Colors.orange;
-      case 'technology':
-        return Colors.purple;
-      case 'politics':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 }

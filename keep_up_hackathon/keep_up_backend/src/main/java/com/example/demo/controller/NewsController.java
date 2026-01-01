@@ -10,8 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/news")
@@ -35,33 +35,66 @@ public class NewsController {
         this.quizService = quizService;
     }
 
-    // GENERATE NEWS
-    @GetMapping("/generate")
-    public String generateNews(@RequestParam String region) {
-        String rawFacts = vertexAiService.researchNews(region);
-        String toonJson = vertexAiService.formatToToonJson(rawFacts);
-        newsIndexingService.processAndSave(toonJson);
+    // ✅ 1. USER CREATION ENDPOINT (Matches Flutter's call)
+    @PostMapping("/user/create")
+    public String createUser(@RequestParam String userId, @RequestParam String name) {
+        System.out.println("🆕 Creating User: " + name + " (" + userId + ")");
+        return userService.createUser(userId, name);
+    }
 
+    // ✅ 2. UPDATE NAME ENDPOINT (Matches Pencil Icon)
+    @PostMapping("/user/updateName")
+    public String updateName(@RequestParam String userId, @RequestParam String newName) throws ExecutionException, InterruptedException {
+        System.out.println("✏️ Updating Name for " + userId + " to " + newName);
+        return userService.updateUserName(userId, newName);
+    }
+
+    // ✅ 3. GET PROFILE ENDPOINT
+    @GetMapping("/user/{userId}")
+    public Map<String, Object> getUserProfile(@PathVariable String userId) throws Exception {
+        return userService.getUserProfile(userId);
+    }
+
+    // ... (KEEP ALL YOUR EXISTING NEWS, FEED, CHAT, QUIZ ENDPOINTS BELOW) ...
+
+    // ✅ UPDATED: Pass 'date' to researchNews to force strict date matching
+    @GetMapping("/generate")
+    public String generateNews(@RequestParam String region, @RequestParam(required = false) String date) {
+        // Use provided date, or default to today
+        String targetDate = (date != null && !date.isEmpty()) ? date : java.time.LocalDate.now().toString();
+
+        System.out.println("🔎 Starting Strict Research for " + targetDate + "...");
+
+        // 1. Pass the DATE to the AI (This is the key fix!)
+        String rawFacts = vertexAiService.researchNews(region, targetDate);
+
+        System.out.println("🎨 Formatting News...");
+        String toonJson = vertexAiService.formatToToonJson(rawFacts);
+
+        // 2. Save with the SAME date so it goes into the correct "Day Box"
+        newsIndexingService.processAndSave(toonJson, targetDate);
+
+        System.out.println("🎓 Creating Daily Quiz...");
         String quizJson = vertexAiService.generateQuizFromNews(rawFacts);
         quizService.saveDailyQuiz(quizJson);
 
-        return "Generation Complete!";
+        return "Generation Complete for " + targetDate;
     }
 
-    // ✅ FEED ENDPOINT (Fixed: No direct Firestore calls)
     @GetMapping("/feed")
     public List<Toon> getNewsFeed(@RequestParam(required = false) String date) {
-        // Pass the date to the service. If date is null, service handles it.
         return newsIndexingService.getAllNewsSegments(date);
     }
 
-    // ... (Keep Chat, Quiz, User endpoints the same) ...
+    @GetMapping("/catchup")
+    public List<Map<String, Object>> getCatchUp() throws Exception {
+        return catchUpService.getWeeklyCatchUp("US");
+    }
 
     @GetMapping("/chat")
     public String chatWithNews(@RequestParam String question) {
-        List<Toon> allNews = newsIndexingService.getAllNewsSegments(null); // Fetch all for context
+        List<Toon> allNews = newsIndexingService.getAllNewsSegments(null);
         if (allNews.isEmpty()) return "No news context available.";
-
         StringBuilder contextBuilder = new StringBuilder();
         for (Toon segment : allNews) {
             contextBuilder.append(segment.toToonString()).append("\n");
@@ -69,7 +102,6 @@ public class NewsController {
         return vertexAiService.chatWithNews(question, contextBuilder.toString());
     }
 
-    // ... Bookmarks ...
     @PostMapping("/user/{userId}/bookmark")
     public String addBookmark(@PathVariable String userId, @RequestBody Toon newsItem) {
         return userService.addBookmark(userId, newsItem);
@@ -85,7 +117,6 @@ public class NewsController {
         return userService.getBookmarks(userId);
     }
 
-    // ... Quiz & Leaderboard ...
     @GetMapping("/quiz")
     public String getQuiz() throws ExecutionException, InterruptedException {
         return quizService.getDailyQuiz();
@@ -96,24 +127,8 @@ public class NewsController {
         return userService.getGlobalLeaderboard();
     }
 
-    @GetMapping("/catchup")
-    public String getCatchUp() throws Exception {
-        return catchUpService.getDailyCatchUp("US"); // Default region
-    }
-
-    // ... User ...
-    @PostMapping("/user/create")
-    public String createUser(@RequestParam String userId, @RequestParam String name) {
-        return userService.createUser(userId, name);
-    }
-
     @PostMapping("/user/xp")
     public String addXp(@RequestParam String userId, @RequestParam int points) throws Exception {
         return userService.addXp(userId, points);
-    }
-
-    @GetMapping("/user/{userId}")
-    public Map<String, Object> getUserProfile(@PathVariable String userId) throws Exception {
-        return userService.getUserProfile(userId);
     }
 }

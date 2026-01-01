@@ -1,215 +1,128 @@
 package com.example.demo.service;
 
-import com.example.demo.model.User;
-import com.example.demo.model.Toon; // Import your Toon/News model
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.DocumentSnapshot;
-import com.google.cloud.firestore.QueryDocumentSnapshot;
-import com.google.cloud.firestore.Query;
+import com.google.cloud.firestore.*;
+import com.google.firebase.cloud.FirestoreClient;
+import com.example.demo.model.Toon;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 @Service
 public class UserService {
 
-    private final Firestore firestore;
+    private static final String COLLECTION_NAME = "users";
 
-    public UserService(Firestore firestore) {
-        this.firestore = firestore;
-    }
-
-    // 1. Create User (When they first open the app)
-    public String createUser(String userId, String username) {
-        User newUser = new User(userId, username);
-        firestore.collection("users").document(userId).set(newUser);
-        return "User created: " + username;
-    }
-
-    // 2. Add XP (When they win a quiz)
-    public String addXp(String userId, int points) throws ExecutionException, InterruptedException {
-        var docRef = firestore.collection("users").document(userId);
-        User user = docRef.get().get().toObject(User.class);
-
-        if (user != null) {
-            int newScore = user.getXp() + points;
-            user.setXp(newScore);
-
-            // Promotion Logic
-            if (newScore >= 500) user.setLeague("Gold");
-            else if (newScore >= 100) user.setLeague("Silver");
-
-            docRef.set(user);
-            return "XP Updated! New Score: " + newScore + " (" + user.getLeague() + ")";
-        }
-        return "User not found!";
-    }
-
-    // 3. Get User Info
-    public User getUser(String userId) throws ExecutionException, InterruptedException {
-        return firestore.collection("users").document(userId).get().get().toObject(User.class);
-    }
-
-    // 4. End of Season Promotion Logic
-    public String promoteTopPlayers() throws ExecutionException, InterruptedException {
-        int promotedToGold = 0;
-        int promotedToSilver = 0;
-
-        // PHASE 1: Silver -> Gold
-        var silverQuery = firestore.collection("users")
-                .whereEqualTo("league", "Silver")
-                .orderBy("xp", Query.Direction.DESCENDING)
-                .limit(5);
-
-        var silverDocs = silverQuery.get().get().getDocuments();
-        for (var doc : silverDocs) {
-            User winner = doc.toObject(User.class);
-            if (winner != null) {
-                winner.setLeague("Gold");
-                firestore.collection("users").document(winner.getUserId()).set(winner);
-                promotedToGold++;
-            }
-        }
-
-        // PHASE 2: Bronze -> Silver
-        var bronzeQuery = firestore.collection("users")
-                .whereEqualTo("league", "Bronze")
-                .orderBy("xp", Query.Direction.DESCENDING)
-                .limit(10);
-
-        var bronzeDocs = bronzeQuery.get().get().getDocuments();
-        for (var doc : bronzeDocs) {
-            User winner = doc.toObject(User.class);
-            if (winner != null) {
-                winner.setLeague("Silver");
-                firestore.collection("users").document(winner.getUserId()).set(winner);
-                promotedToSilver++;
-            }
-        }
-
-        return "Season Ended! 🥇 " + promotedToGold + " moved to Gold. 🥈 " + promotedToSilver + " moved to Silver.";
-    }
-
-    // 5. Get League Leaderboard
-    public List<User> getLeaderboard(String league) throws ExecutionException, InterruptedException {
-        var query = firestore.collection("users")
-                .whereEqualTo("league", league)
-                .orderBy("xp", Query.Direction.DESCENDING)
-                .limit(20);
-
-        return query.get().get().toObjects(User.class);
-    }
-
-    // 6. Global Leaderboard (For Mobile App)
-    public List<Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
-        List<Map<String, Object>> response = new ArrayList<>();
-
-        var query = firestore.collection("users")
-                .orderBy("xp", Query.Direction.DESCENDING)
-                .limit(10)
-                .get()
-                .get();
-
-        for (var doc : query.getDocuments()) {
-            User user = doc.toObject(User.class);
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", user.getUserId());
-            map.put("name", user.getUsername());
-            map.put("xp", user.getXp());
-            response.add(map);
-        }
-        return response;
-    }
-
-    // 7. Init Dummy Data
-    public String initDummyData() {
+    // ✅ 1. CREATE USER (Called when Google Login succeeds)
+    public String createUser(String userId, String name) {
         try {
-            createDummy("user_1", "Hacker (You)", 1250, "Gold");
-            createDummy("user_2", "Alice", 1400, "Gold");
-            createDummy("user_3", "Bob", 800, "Silver");
-            createDummy("user_4", "Charlie", 2100, "Gold");
-            createDummy("user_5", "Dave", 1100, "Silver");
-            return "Leaderboard initialized!";
-        } catch (Exception e) {
-            return "Error: " + e.getMessage();
-        }
-    }
+            Firestore db = FirestoreClient.getFirestore();
+            DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
 
-    private void createDummy(String id, String name, int xp, String league) {
-        User u = new User(id, name);
-        u.setXp(xp);
-        u.setLeague(league);
-        firestore.collection("users").document(id).set(u);
-    }
-
-    // 8. Get User Profile with Rank
-    public Map<String, Object> getUserProfile(String userId) throws ExecutionException, InterruptedException {
-        DocumentSnapshot userDoc = firestore.collection("users").document(userId).get().get();
-        if (!userDoc.exists()) return null;
-
-        User user = userDoc.toObject(User.class);
-
-        // Calculate Rank
-        var allUsers = getGlobalLeaderboard();
-        int rank = 0;
-        for (int i = 0; i < allUsers.size(); i++) {
-            if (allUsers.get(i).get("id").equals(userId)) {
-                rank = i + 1;
-                break;
+            // Check if user already exists to avoid overwriting XP
+            if (userRef.get().get().exists()) {
+                return "User already exists";
             }
-        }
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("xp", user.getXp());
-        response.put("rank", rank > 0 ? rank : "-");
-        response.put("streak", 3);
-        response.put("username", user.getUsername());
+            Map<String, Object> user = new HashMap<>();
+            user.put("name", name);
+            user.put("xp", 100); // 🎁 Sign up bonus!
+            user.put("streak", 1);
+            user.put("rank", 999);
+            user.put("bookmarks", new ArrayList<>());
 
-        return response;
-    }
-
-    // ==========================================
-    //      NEW BOOKMARK METHODS (Added)
-    // ==========================================
-
-    // 9. Add Bookmark
-    public String addBookmark(String userId, Toon newsItem) {
-        try {
-            firestore.collection("users").document(userId)
-                    .collection("bookmarks").document(newsItem.getId())
-                    .set(newsItem);
-            return "Bookmarked!";
+            userRef.set(user);
+            return "User Created";
         } catch (Exception e) {
             e.printStackTrace();
-            return "Error adding bookmark: " + e.getMessage();
+            return "Error";
         }
     }
 
-    // 10. Remove Bookmark
+    // ✅ 2. UPDATE NAME (Called when you click the pencil icon)
+    public String updateUserName(String userId, String newName) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        db.collection(COLLECTION_NAME).document(userId).update("name", newName);
+        return "Name Updated";
+    }
+
+    // 3. GET PROFILE (Stats)
+    public Map<String, Object> getUserProfile(String userId) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentSnapshot doc = db.collection(COLLECTION_NAME).document(userId).get().get();
+
+        if (!doc.exists()) {
+            // Fallback: Create user if missing
+            createUser(userId, "Reader");
+            return getUserProfile(userId);
+        }
+
+        Map<String, Object> userData = doc.getData();
+        long xp = (long) userData.getOrDefault("xp", 0L);
+        userData.put("rank", getRank(xp)); // Recalculate rank dynamically
+        return userData;
+    }
+
+    // ... (Keep your existing getGlobalLeaderboard, addXp, and bookmark methods) ...
+
+    // Helper: Calculate Rank
+    private int getRank(long myXp) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        AggregateQuerySnapshot snapshot = db.collection(COLLECTION_NAME)
+                .whereGreaterThan("xp", myXp)
+                .count()
+                .get().get();
+        return (int) snapshot.getCount() + 1;
+    }
+
+    // ... Copy your existing addBookmark / removeBookmark / getBookmarks methods here ...
+    public String addBookmark(String userId, Toon newsItem) {
+        try {
+            FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId)
+                    .collection("bookmarks").document(newsItem.getId()).set(newsItem);
+            return "Saved";
+        } catch (Exception e) { return "Error"; }
+    }
+
     public String removeBookmark(String userId, String newsId) {
         try {
-            firestore.collection("users").document(userId)
-                    .collection("bookmarks").document(newsId)
-                    .delete();
-            return "Removed!";
-        } catch (Exception e) {
-            return "Error removing bookmark";
-        }
+            FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId)
+                    .collection("bookmarks").document(newsId).delete();
+            return "Removed";
+        } catch (Exception e) { return "Error"; }
     }
 
-    // 11. Get All Bookmarks
-    public List<Toon> getBookmarks(String userId) throws ExecutionException, InterruptedException {
-        List<Toon> bookmarks = new ArrayList<>();
-        var future = firestore.collection("users").document(userId).collection("bookmarks").get();
-        List<QueryDocumentSnapshot> docs = future.get().getDocuments();
+    public List<Toon> getBookmarks(String userId) throws Exception {
+        List<Toon> list = new ArrayList<>();
+        List<QueryDocumentSnapshot> docs = FirestoreClient.getFirestore()
+                .collection(COLLECTION_NAME).document(userId)
+                .collection("bookmarks").get().get().getDocuments();
+        for (QueryDocumentSnapshot d : docs) list.add(d.toObject(Toon.class));
+        return list;
+    }
 
+    public List<Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        List<QueryDocumentSnapshot> docs = db.collection(COLLECTION_NAME)
+                .orderBy("xp", Query.Direction.DESCENDING)
+                .limit(10)
+                .get().get().getDocuments();
+
+        List<Map<String, Object>> leaderboard = new ArrayList<>();
+        int rank = 1;
         for (QueryDocumentSnapshot doc : docs) {
-            bookmarks.add(doc.toObject(Toon.class));
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("rank", rank++);
+            entry.put("name", doc.getString("name"));
+            entry.put("xp", doc.getLong("xp"));
+            leaderboard.add(entry);
         }
-        return bookmarks;
+        return leaderboard;
+    }
+
+    public String addXp(String userId, int points) throws ExecutionException, InterruptedException {
+        FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId)
+                .update("xp", FieldValue.increment(points));
+        return "XP Added";
     }
 }

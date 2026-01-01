@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1001134314926",
+    "project_id": "project-e0914f81-9c04-40ed-a44",
+    "storage_bucket": "project-e0914f81-9c04-40ed-a44.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1001134314926:android:6834c33475b31298f3e43f",
+        "android_client_info": {
+          "package_name": "com.example.keep_up_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1001134314926-7g94kvutskigjeol0ngm350lq0c47klg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZw_0yJXnjMDJgf_-tCg5S-txIZfv_NP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1001134314926-7g94kvutskigjeol0ngm350lq0c47klg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
