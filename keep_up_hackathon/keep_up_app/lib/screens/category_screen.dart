@@ -26,7 +26,7 @@ class CategoryScreen extends StatelessWidget {
       "color": Color(0xFFFFCC80), // Orange tint
     },
     {
-      "name": "Health",
+      "name": "Politics",
       "image":
           "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=1000&auto=format&fit=crop", // Runner
       "color": Color(0xFFFFB74D), // Deep Orange tint

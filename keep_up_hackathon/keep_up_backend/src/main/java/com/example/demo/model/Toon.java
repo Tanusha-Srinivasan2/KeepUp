@@ -1,26 +1,25 @@
 package com.example.demo.model;
 
-// 1. REMOVED the import for DocumentId
-// import com.google.cloud.firestore.annotation.DocumentId;
-
 import java.util.List;
 
 public class Toon {
 
-    // 2. REMOVED the @DocumentId annotation
-    // This allows the "id" field to be treated like normal data without crashing
     private String id;
 
-    // --- NEW FIELDS FOR FLUTTER CARDS ---
-    private String title;        // "NASA Confirms Ocean"
-    private String description;  // "We are now closer than ever..."
-    private String imageUrl;     // URL to the image
-    private String time;         // "2h ago"
+    // --- NEW FIELDS FOR SORTING & FILTERING ---
+    private long timestamp;       // e.g., 1704094000000 (For sorting newest first)
+    private String publishedDate; // e.g., "2025-12-30" (For calendar filtering)
+
+    // --- FLUTTER CARD FIELDS ---
+    private String title;
+    private String description;
+    private String imageUrl;
+    private String time;
 
     // --- EXISTING FIELDS ---
-    private String topic;        // "Science"
-    private List<String> keywords; // ["NASA", "Space"]
-    private String contentLine; // Keeping this for backward compatibility
+    private String topic;
+    private List<String> keywords;
+    private String contentLine;
 
     public Toon() {} // Required for Firestore
 
@@ -36,6 +35,13 @@ public class Toon {
     // --- GETTERS AND SETTERS ---
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+
+    // ✅ New Getters/Setters for Date Logic
+    public long getTimestamp() { return timestamp; }
+    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
+
+    public String getPublishedDate() { return publishedDate; }
+    public void setPublishedDate(String publishedDate) { this.publishedDate = publishedDate; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -58,7 +64,6 @@ public class Toon {
     public String getContentLine() { return contentLine; }
     public void setContentLine(String contentLine) { this.contentLine = contentLine; }
 
-    // Helper for Chat Context (Important for ChatBot)
     public String toToonString() {
         return String.format("[%s | %s]: %s", topic, title != null ? title : "News", description != null ? description : "No details");
     }

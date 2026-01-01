@@ -1,13 +1,15 @@
 package com.example.demo.service;
 
-import com.example.demo.model.Toon; // <--- FIX: Import the new Toon class
+import com.example.demo.model.Toon;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
-import com.google.firebase.cloud.FirestoreClient; // <--- FIX: Direct Firestore access
+import com.google.firebase.cloud.FirestoreClient;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,52 +19,60 @@ import java.util.concurrent.ExecutionException;
 public class NewsIndexingService {
 
     private final ObjectMapper objectMapper;
-    private static final String COLLECTION_NAME = "toon_index"; // The collection in your DB screenshot
+    // ✅ FIX: Use "toon_index" to match your database screenshot
+    private static final String COLLECTION_NAME = "toon_index";
 
     public NewsIndexingService() {
         this.objectMapper = new ObjectMapper();
     }
 
-    // 1. Process and Save News (Gemini -> Database)
+    // 1. Process and Save (Gemini -> DB)
     public void processAndSave(String jsonOutput) {
         try {
-            // Clean the JSON string (Gemini sometimes adds markdown blocks)
             String cleanJson = jsonOutput.replace("```json", "").replace("```", "").trim();
-
-            // Convert string to List of 'Toon' objects
             List<Toon> newToons = objectMapper.readValue(cleanJson, new TypeReference<List<Toon>>() {});
 
             Firestore db = FirestoreClient.getFirestore();
+            String todayDate = LocalDate.now().toString();
+            long nowTimestamp = System.currentTimeMillis();
 
-            // Save each Toon to Firestore
             for (Toon toon : newToons) {
-                // Generate ID if missing
                 if (toon.getId() == null || toon.getId().isEmpty()) {
                     toon.setId(UUID.randomUUID().toString());
                 }
+                // Auto-stamp date
+                toon.setPublishedDate(todayDate);
+                toon.setTimestamp(nowTimestamp);
 
-                // Save to 'toon_index' collection
                 db.collection(COLLECTION_NAME).document(toon.getId()).set(toon);
-                System.out.println("✅ Saved Toon: " + toon.getTitle());
             }
-
         } catch (Exception e) {
-            System.err.println("❌ Error processing news JSON: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    // 2. Fetch all news for the Feed and Chat
-    public List<Toon> getAllNewsSegments() {
+    // ✅ 2. FETCH NEWS (Logic moved here!)
+    public List<Toon> getAllNewsSegments(String dateFilter) {
         List<Toon> newsList = new ArrayList<>();
         Firestore db = FirestoreClient.getFirestore();
 
         try {
-            // Fetch all documents from 'toon_index'
-            List<QueryDocumentSnapshot> documents = db.collection(COLLECTION_NAME).get().get().getDocuments();
+            Query query;
+
+            if (dateFilter != null && !dateFilter.isEmpty()) {
+                // 🗓️ FILTER: Get news for specific date
+                System.out.println("🔎 Filtering for date: " + dateFilter);
+                query = db.collection(COLLECTION_NAME).whereEqualTo("publishedDate", dateFilter);
+            } else {
+                // ⚡ DEFAULT: Sort by Newest First
+                query = db.collection(COLLECTION_NAME)
+                        .orderBy("timestamp", Query.Direction.DESCENDING)
+                        .limit(50);
+            }
+
+            List<QueryDocumentSnapshot> documents = query.get().get().getDocuments();
 
             for (QueryDocumentSnapshot document : documents) {
-                // Map Firestore document to 'Toon' class
                 Toon toon = document.toObject(Toon.class);
                 toon.setId(document.getId());
                 newsList.add(toon);

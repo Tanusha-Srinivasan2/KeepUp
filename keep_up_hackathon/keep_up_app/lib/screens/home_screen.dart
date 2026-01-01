@@ -6,9 +6,11 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // ✅ Added for Chat
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:intl/intl.dart'; // ✅ Required for Date Formatting
 
-import '../models/news_model.dart'; // Ensure this matches your filename
+import '../models/news_model.dart';
+import '../widgets/voice_button.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -23,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<NewsCard> cards = [];
   bool isLoading = true;
 
-  // ✅ 1. Voice & Chat Variables
+  // Voice & Chat Variables
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -42,6 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
     "Entertainment",
   ];
   int _selectedCategoryIndex = 0;
+
+  // ✅ NEW: Date Filter Variable
+  DateTime? _selectedDate;
 
   @override
   void initState() {
@@ -69,7 +74,90 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ✅ 2. CHAT MODAL LOGIC
+  // ✅ NEW: Date Picker Function
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2025), // Adjust based on when your app started
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: Colors.orange,
+            colorScheme: const ColorScheme.light(primary: Colors.orange),
+            buttonTheme: const ButtonThemeData(
+              textTheme: ButtonTextTheme.primary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+      // Re-fetch news with the new date filter
+      fetchNews(_categories[_selectedCategoryIndex]);
+    }
+  }
+
+  // ✅ NEW: Clear Date Filter
+  void _clearDateFilter() {
+    setState(() {
+      _selectedDate = null;
+    });
+    fetchNews(_categories[_selectedCategoryIndex]);
+  }
+
+  // ✅ UPDATED: Fetch News with Date Support
+  Future<void> fetchNews(String category) async {
+    setState(() => isLoading = true);
+
+    // Base URL
+    String baseUrl = 'http://10.0.2.2:8080/api/news/feed';
+
+    // If a date is selected, append it to query params
+    if (_selectedDate != null) {
+      String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+      baseUrl += "?date=$dateStr";
+    }
+
+    try {
+      final response = await http.get(Uri.parse(baseUrl));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        List<NewsCard> allCards = data
+            .map((json) => NewsCard.fromJson(json))
+            .toList();
+
+        // Apply Category Filter locally (since API returns mixed topics for now)
+        if (category != "All") {
+          allCards = allCards
+              .where(
+                (c) => c.topic.toLowerCase().contains(category.toLowerCase()),
+              )
+              .toList();
+        }
+
+        setState(() {
+          cards = allCards;
+          isLoading = false;
+        });
+      } else {
+        setState(() => isLoading = false);
+      }
+    } catch (e) {
+      print("Fetch Error: $e");
+      setState(() => isLoading = false);
+    }
+  }
+
+  // --- EXISTING FEATURES (Chat, Bookmark, etc.) ---
+
   void _showChatModal() {
     showModalBottomSheet(
       context: context,
@@ -188,24 +276,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _askAI(String question) async {
-    // Context-aware question based on current category
     String fullQuestion =
         "Context: Browsing ${_categories[_selectedCategoryIndex]} news. Question: $question";
     final url = Uri.parse(
       'http://10.0.2.2:8080/api/news/chat?question=$fullQuestion',
     );
-
     try {
       final response = await http.get(url);
-      if (response.statusCode == 200) {
-        await flutterTts.speak(response.body);
-      }
+      if (response.statusCode == 200) await flutterTts.speak(response.body);
     } catch (e) {
       print("AI Error: $e");
     }
   }
 
-  // ... (Existing Save Bookmark & Speak Logic remains same)
   Future<void> _saveBookmark(NewsCard card) async {
     setState(() => _savedCardIds.add(card.id));
     final prefs = await SharedPreferences.getInstance();
@@ -237,41 +320,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await flutterTts.speak(text);
   }
 
-  Future<void> fetchNews(String category) async {
-    setState(() => isLoading = true);
-    final url = Uri.parse('http://10.0.2.2:8080/api/news/feed');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        List<NewsCard> allCards = data
-            .map((json) => NewsCard.fromJson(json))
-            .toList();
-        if (category != "All") {
-          allCards = allCards
-              .where(
-                (c) => c.topic.toLowerCase().contains(category.toLowerCase()),
-              )
-              .toList();
-        }
-        setState(() {
-          cards = allCards;
-          isLoading = false;
-        });
-      } else {
-        setState(() => isLoading = false);
-      }
-    } catch (e) {
-      setState(() => isLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5),
-
-      // ✅ 3. REPLACED VoiceAssistantButton with FOX FAB
       floatingActionButton: SizedBox(
         width: 70,
         height: 70,
@@ -282,7 +334,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Image.asset('assets/fox.png', fit: BoxFit.contain),
         ),
       ),
-
       bottomNavigationBar: _buildBottomNavBar(),
       body: SafeArea(
         child: Column(
@@ -315,8 +366,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // ... (Keep existing Helper Widgets: _buildCategoryTabs, _buildEmptyState, _buildHeader, _buildNewsCard, _iconWithAction, _buildBottomNavBar, _navItem)
 
   Widget _buildCategoryTabs() {
     return SizedBox(
@@ -380,7 +429,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const Icon(Icons.search_off, size: 50, color: Colors.grey),
           const SizedBox(height: 10),
           Text(
-            "No news found.",
+            _selectedDate != null
+                ? "No news found for ${DateFormat('MMM d').format(_selectedDate!)}."
+                : "No news found.",
             style: GoogleFonts.poppins(color: Colors.black54),
           ),
           const SizedBox(height: 20),
@@ -394,12 +445,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ UPDATED HEADER WITH CALENDAR
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 15),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Left Side: Back + Title + Filter Status
           Row(
             children: [
               IconButton(
@@ -412,23 +465,58 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (Navigator.canPop(context)) Navigator.of(context).pop();
                 },
               ),
-              Text(
-                "Discover",
-                style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D2D2D),
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Discover",
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2D2D2D),
+                    ),
+                  ),
+                  // Show active filter if present
+                  if (_selectedDate != null)
+                    GestureDetector(
+                      onTap: _clearDateFilter,
+                      child: Text(
+                        "${DateFormat('MMM d').format(_selectedDate!)} (Tap to Clear)",
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            child: const Icon(
-              Icons.catching_pokemon,
-              color: Colors.orange,
-              size: 30,
-            ),
+
+          // Right Side: Calendar + Fox
+          Row(
+            children: [
+              // Calendar Button
+              IconButton(
+                icon: Icon(
+                  Icons.calendar_today_outlined,
+                  color: _selectedDate != null
+                      ? Colors.orange
+                      : Colors.grey[800],
+                ),
+                onPressed: _pickDate,
+              ),
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.all(8),
+                child: const Icon(
+                  Icons.catching_pokemon,
+                  color: Colors.orange,
+                  size: 30,
+                ),
+              ),
+            ],
           ),
         ],
       ),

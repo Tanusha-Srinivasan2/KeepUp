@@ -24,7 +24,7 @@ public class VertexAiService {
         1. IMPACT: Must affect >1 million people or major markets.
         2. RECENCY: Must be published within the last 24 hours.
         3. CREDIBILITY: Must be verified by major sources (e.g., Reuters, AP, Bloomberg).
-        4. CATEGORIES: Select exactly 1 story for: Tech, Sports, Politics, Business, and Science.
+        4. CATEGORIES: Select exactly 1 story for: Technology, Sports, Politics, Business, and Science.
         
         OUTPUT LIMITS:
         - Provide ONLY a brief summary of core facts for each story.
@@ -53,7 +53,7 @@ public class VertexAiService {
             4. "description": Engaging summary, max 20 words.
             5. "time": Use relative time (e.g., "2h ago", "Just now").
             6. "imageUrl": Provide a valid placeholder URL related to the topic.
-               - Tech: "https://images.unsplash.com/photo-1518770660439-4636190af475"
+               - Technology: "https://images.unsplash.com/photo-1518770660439-4636190af475"
                - Sports: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211"
                - Science: "https://images.unsplash.com/photo-1507413245164-6160d8298b31"
                - Business: "https://images.unsplash.com/photo-1460925895917-afdab827c52f"
@@ -62,7 +62,7 @@ public class VertexAiService {
             SCHEMA:
             [
               {
-                "topic": "Tech",
+                "topic": "Technology",
                 "title": "Headline text here",
                 "description": "Short summary of the event.",
                 "time": "4h ago",
@@ -145,7 +145,7 @@ public class VertexAiService {
             SCHEMA:
             [
               {
-                "topic": "Tech",
+                "topic": "Technology",
                 "title": "Headline text here",
                 "description": "Short summary of the event.",
                 "time": "4h ago",

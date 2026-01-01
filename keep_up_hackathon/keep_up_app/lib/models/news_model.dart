@@ -1,11 +1,14 @@
 class NewsCard {
   final String id;
-  final String title; // New field
-  final String description; // New field
-  final String imageUrl; // New field
-  final String time; // New field
+  final String title;
+  final String description;
+  final String imageUrl;
+  final String time;
   final String topic;
   final List<String> keywords;
+
+  // ✅ NEW FIELD: To store the date stamp (e.g. "2026-01-01")
+  final String publishedDate;
 
   NewsCard({
     required this.id,
@@ -15,24 +18,25 @@ class NewsCard {
     required this.time,
     required this.topic,
     required this.keywords,
+    this.publishedDate = '', // Default empty if missing
   });
 
-  // Factory to convert JSON from Java Backend -> Flutter Object
   factory NewsCard.fromJson(Map<String, dynamic> json) {
     return NewsCard(
       id: json['id'] ?? '',
-      // Map 'title' from JSON. Fallback to 'News' if missing.
       title: json['title'] ?? 'News Update',
-      // Map 'description'. If null, try 'contentLine' (backward compatibility).
+      // Fallback for description logic
       description:
           json['description'] ?? json['contentLine'] ?? 'No details available.',
-      // Map 'imageUrl'. Provide a default placeholder if missing.
       imageUrl:
           json['imageUrl'] ??
           'https://images.unsplash.com/photo-1504711434969-e33886168f5c',
       time: json['time'] ?? 'Just now',
       topic: json['topic'] ?? 'General',
       keywords: List<String>.from(json['keywords'] ?? []),
+
+      // ✅ PARSE DATE
+      publishedDate: json['publishedDate'] ?? '',
     );
   }
 }
