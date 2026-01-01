@@ -3,17 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-// --- CLEAN IMPORTS ---
 import '../main.dart'; // Colors
-import '../widgets/voice_button.dart';
 import '../models/quiz_model.dart';
 
 // Screens
 import 'category_screen.dart';
 import 'leaderboard_screen.dart';
 import 'quiz_screen.dart';
-import 'catchup_screen.dart'; // ✅ Correct Import
+import 'catchup_screen.dart';
+import 'bookmarks_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -30,11 +31,166 @@ class _LandingPageState extends State<LandingPage> {
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
+  // ✅ 1. VOICE ASSISTANT VARIABLES
+  final FlutterTts flutterTts = FlutterTts();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _isThinking = false;
+
   @override
   void initState() {
     super.initState();
     _fetchUserData();
   }
+
+  @override
+  void dispose() {
+    flutterTts.stop();
+    _speech.cancel();
+    super.dispose();
+  }
+
+  // ✅ 2. CHAT MODAL LOGIC (The Fox's Brain)
+  void _showChatModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildChatSheet(),
+    );
+  }
+
+  Widget _buildChatSheet() {
+    return StatefulBuilder(
+      builder: (context, setModalState) {
+        return Container(
+          height: 400,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Image.asset('assets/fox.png', width: 40, height: 40),
+                      const SizedBox(width: 10),
+                      Text(
+                        "How can I help?",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(),
+
+              // Status Text
+              Expanded(
+                child: Center(
+                  child: _isThinking
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Checking the news...",
+                              style: GoogleFonts.poppins(color: Colors.grey),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          "Tap the mic to ask about the latest news, stats, or general questions.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
+                        ),
+                ),
+              ),
+
+              // Mic Button
+              GestureDetector(
+                onTapDown: (_) async {
+                  bool available = await _speech.initialize();
+                  if (available) {
+                    setModalState(() => _isListening = true);
+                    _speech.listen(
+                      onResult: (val) async {
+                        if (val.hasConfidenceRating && val.confidence > 0) {
+                          if (val.finalResult) {
+                            setModalState(() {
+                              _isListening = false;
+                              _isThinking = true;
+                            });
+                            await _askAI(val.recognizedWords);
+                            if (mounted)
+                              Navigator.pop(context); // Close after asking
+                          }
+                        }
+                      },
+                    );
+                  }
+                },
+                onTapUp: (_) {
+                  setModalState(() => _isListening = false);
+                  _speech.stop();
+                },
+                child: CircleAvatar(
+                  radius: 35,
+                  backgroundColor: _isListening ? Colors.red : Colors.orange,
+                  child: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _isListening ? "Listening..." : "Hold to Speak",
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _askAI(String question) async {
+    // Calls your General Chat Endpoint (which searches all news)
+    final url = Uri.parse(
+      'http://10.0.2.2:8080/api/news/chat?question=$question',
+    );
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        await flutterTts.speak(response.body);
+      }
+    } catch (e) {
+      print("AI Error: $e");
+      await flutterTts.speak("Sorry, I'm having trouble connecting.");
+    }
+  }
+
+  // --- EXISTING LOGIC ---
 
   Future<void> _fetchUserData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -113,9 +269,7 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButton: const VoiceAssistantButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-
+      // ✅ 3. REMOVED floatingActionButton (Green Mic)
       appBar: AppBar(
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -146,11 +300,27 @@ class _LandingPageState extends State<LandingPage> {
             // 1. Welcome Section
             Row(
               children: [
-                Image.asset(
-                  'assets/fox.png',
-                  width: 80,
-                  height: 80,
-                  fit: BoxFit.contain,
+                // ✅ 4. WRAPPED FOX IN GESTURE DETECTOR
+                GestureDetector(
+                  onTap: _showChatModal, // Clicking Fox opens Chat
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/fox.png',
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
@@ -205,7 +375,6 @@ class _LandingPageState extends State<LandingPage> {
                     bgColor: KeepUpApp.bgPurple,
                     textColor: Colors.white,
                     btnColor: Colors.white.withOpacity(0.2),
-                    // ✅ FIXED: Points to CatchUpScreen(), NOT CatchUpItem()
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -228,14 +397,15 @@ class _LandingPageState extends State<LandingPage> {
               ),
             ),
             const SizedBox(height: 20),
+
             _buildFullWidthCard(
               context,
-              title: "Local news",
+              title: "Your Bookmarks",
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const CategoryScreen(),
+                    builder: (context) => const BookmarksScreen(),
                   ),
                 );
               },
@@ -262,6 +432,7 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
+  // ... (Helper widgets remain unchanged)
   Widget _buildTopStat(String imagePath, String value, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,

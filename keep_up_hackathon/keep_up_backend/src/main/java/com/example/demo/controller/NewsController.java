@@ -35,7 +35,7 @@ public class NewsController {
         this.quizService = quizService;
     }
 
-    // GENERATE NEWS (Call this to refresh the database with new cards)
+    // GENERATE NEWS
     @GetMapping("/generate")
     public String generateNews(@RequestParam String region) {
         System.out.println("🔎 Starting Research...");
@@ -49,28 +49,25 @@ public class NewsController {
         String quizJson = vertexAiService.generateQuizFromNews(rawFacts);
         quizService.saveDailyQuiz(quizJson);
 
+        // CLEAR OLD CACHE when new news is generated
+        // (Optional: You might want to delete old catchups here)
+
         return "Generation Complete! \nNews: " + toonJson + "\n\nQuiz: " + quizJson;
     }
 
     // CHAT WITH NEWS
     @GetMapping("/chat")
     public String chatWithNews(@RequestParam String question) {
-        System.out.println("🗣️ Chat Request: " + question);
         List<Toon> allNews = newsIndexingService.getAllNewsSegments();
-
         if (allNews.isEmpty()) {
-            // Fallback: If DB is empty, just ask the AI directly (it will use Google Search if configured)
             return vertexAiService.chatWithNews(question, "No local news context available.");
         }
-
         StringBuilder contextBuilder = new StringBuilder();
         for (Toon segment : allNews) {
-            // Ensure we are passing the rich description to the AI
             contextBuilder.append("Title: ").append(segment.getTitle())
                     .append(". Description: ").append(segment.getDescription())
                     .append("\n");
         }
-
         return vertexAiService.chatWithNews(question, contextBuilder.toString());
     }
 
@@ -86,7 +83,7 @@ public class NewsController {
         return quizService.getDailyQuiz();
     }
 
-    // LEADERBOARD ENDPOINTS
+    // LEADERBOARD
     @GetMapping("/leaderboard")
     public List<Map<String, Object>> getLeaderboard() throws ExecutionException, InterruptedException {
         return userService.getGlobalLeaderboard();
@@ -97,7 +94,7 @@ public class NewsController {
         return userService.initDummyData();
     }
 
-    // USER MANAGEMENT
+    // USER
     @PostMapping("/user/create")
     public String createUser(@RequestParam String userId, @RequestParam String name) {
         return userService.createUser(userId, name);
@@ -113,33 +110,58 @@ public class NewsController {
         return userService.getUserProfile(userId);
     }
 
-    // --- FIX IS HERE ---
-    // CATCH UP ENDPOINT (Updated to use Database Context)
+    // --- CATCH UP (WITH CACHING) ---
     @GetMapping("/catchup")
     public String getCatchUp() throws Exception {
-        System.out.println("⚡ Generating Catch Up from Database...");
+        // 1. CHECK CACHE: Do we already have a summary for today?
+        // (Assuming your CatchUpService has this method. If not, add it!)
+        String cachedSummary = catchUpService.getTodaySummary();
+        if (cachedSummary != null && !cachedSummary.isEmpty()) {
+            System.out.println("🚀 Serving CatchUp from Cache (Database)");
+            return cachedSummary;
+        }
 
-        // 1. Fetch all news from YOUR database
+        System.out.println("⚡ Cache Miss. Generating Fresh Catch Up...");
+
+        // 2. FETCH CONTEXT: Get data from DB
         List<Toon> allNews = newsIndexingService.getAllNewsSegments();
-
-        // 2. Build the "Database News" String
         StringBuilder contextBuilder = new StringBuilder();
 
         if (allNews.isEmpty()) {
-            System.out.println("⚠️ Database is empty. Sending blank context.");
+            System.out.println("⚠️ Database is empty. Context will be blank.");
         } else {
             for (Toon t : allNews) {
-                // Combine Title and Description for the AI to read
                 String line = String.format("Topic: %s | Title: %s | Description: %s",
                         t.getTopic(), t.getTitle(), t.getDescription());
                 contextBuilder.append(line).append("\n");
             }
         }
 
-        String databaseContext = contextBuilder.toString();
-        // System.out.println("Context being sent to AI: " + databaseContext); // Uncomment to debug
+        // 3. GENERATE: Call AI
+        String generatedJson = vertexAiService.generateCatchUpContent(contextBuilder.toString());
 
-        // 3. Send this string to the AI Service
-        return vertexAiService.generateCatchUpContent(databaseContext);
+        // 4. SAVE TO CACHE: Store it so we don't regenerate next time
+        if (generatedJson != null && generatedJson.length() > 10) {
+            catchUpService.saveDailyCatchUp(generatedJson);
+            System.out.println("💾 CatchUp Saved to Database!");
+        }
+
+        return generatedJson;
+    }
+    // ... inside NewsController class ...
+
+    @PostMapping("/user/{userId}/bookmark")
+    public String addBookmark(@PathVariable String userId, @RequestBody Toon newsItem) {
+        return userService.addBookmark(userId, newsItem);
+    }
+
+    @DeleteMapping("/user/{userId}/bookmark/{newsId}")
+    public String removeBookmark(@PathVariable String userId, @PathVariable String newsId) {
+        return userService.removeBookmark(userId, newsId);
+    }
+
+    @GetMapping("/user/{userId}/bookmarks")
+    public List<Toon> getBookmarks(@PathVariable String userId) throws Exception {
+        return userService.getBookmarks(userId);
     }
 }

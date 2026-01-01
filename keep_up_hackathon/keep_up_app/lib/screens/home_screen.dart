@@ -1,14 +1,14 @@
 import 'dart:convert';
-import 'dart:ui'; // Required for the scroll fix
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt; // ✅ Added for Chat
 
-// Ensure this import points to your updated NewsCard model
-import '../models/news_model.dart';
-import '../widgets/voice_button.dart';
+import '../models/news_model.dart'; // Ensure this matches your filename
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -22,9 +22,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<NewsCard> cards = [];
   bool isLoading = true;
-  final FlutterTts flutterTts = FlutterTts();
 
-  // 1. Categories List
+  // ✅ 1. Voice & Chat Variables
+  final FlutterTts flutterTts = FlutterTts();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _isThinking = false;
+
+  final Set<String> _savedCardIds = {};
+
   final List<String> _categories = [
     "All",
     "Technology",
@@ -35,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
     "Politics",
     "Entertainment",
   ];
-
   int _selectedCategoryIndex = 0;
 
   @override
@@ -44,20 +49,187 @@ class _HomeScreenState extends State<HomeScreen> {
     _handleInitialFilter();
   }
 
-  // 2. Handle incoming category from the Category Screen
   void _handleInitialFilter() {
     if (widget.categoryFilter != null) {
       int passedIndex = _categories.indexWhere(
         (element) =>
             element.toLowerCase() == widget.categoryFilter!.toLowerCase(),
       );
-
       if (passedIndex != -1) {
         _selectedCategoryIndex = passedIndex;
       }
     }
-    // Fetch news immediately based on selection
     fetchNews(_categories[_selectedCategoryIndex]);
+  }
+
+  @override
+  void dispose() {
+    flutterTts.stop();
+    _speech.cancel();
+    super.dispose();
+  }
+
+  // ✅ 2. CHAT MODAL LOGIC
+  void _showChatModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _buildChatSheet(),
+    );
+  }
+
+  Widget _buildChatSheet() {
+    return StatefulBuilder(
+      builder: (context, setModalState) {
+        return Container(
+          height: 400,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Image.asset('assets/fox.png', width: 40, height: 40),
+                      const SizedBox(width: 10),
+                      Text(
+                        "Ask me anything!",
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const Divider(),
+              Expanded(
+                child: Center(
+                  child: _isThinking
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Thinking...",
+                              style: GoogleFonts.poppins(color: Colors.grey),
+                            ),
+                          ],
+                        )
+                      : Text(
+                          "Tap the mic to ask about news in '${_categories[_selectedCategoryIndex]}'.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            color: Colors.black54,
+                          ),
+                        ),
+                ),
+              ),
+              GestureDetector(
+                onTapDown: (_) async {
+                  bool available = await _speech.initialize();
+                  if (available) {
+                    setModalState(() => _isListening = true);
+                    _speech.listen(
+                      onResult: (val) async {
+                        if (val.hasConfidenceRating && val.confidence > 0) {
+                          if (val.finalResult) {
+                            setModalState(() {
+                              _isListening = false;
+                              _isThinking = true;
+                            });
+                            await _askAI(val.recognizedWords);
+                            if (mounted) Navigator.pop(context);
+                          }
+                        }
+                      },
+                    );
+                  }
+                },
+                onTapUp: (_) {
+                  setModalState(() => _isListening = false);
+                  _speech.stop();
+                },
+                child: CircleAvatar(
+                  radius: 35,
+                  backgroundColor: _isListening ? Colors.red : Colors.orange,
+                  child: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _isListening ? "Listening..." : "Hold to Speak",
+                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _askAI(String question) async {
+    // Context-aware question based on current category
+    String fullQuestion =
+        "Context: Browsing ${_categories[_selectedCategoryIndex]} news. Question: $question";
+    final url = Uri.parse(
+      'http://10.0.2.2:8080/api/news/chat?question=$fullQuestion',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        await flutterTts.speak(response.body);
+      }
+    } catch (e) {
+      print("AI Error: $e");
+    }
+  }
+
+  // ... (Existing Save Bookmark & Speak Logic remains same)
+  Future<void> _saveBookmark(NewsCard card) async {
+    setState(() => _savedCardIds.add(card.id));
+    final prefs = await SharedPreferences.getInstance();
+    String? userId = prefs.getString('user_id');
+    if (userId == null) return;
+    final url = Uri.parse(
+      'http://10.0.2.2:8080/api/news/user/$userId/bookmark',
+    );
+    try {
+      await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "id": card.id,
+          "topic": card.topic,
+          "title": card.title,
+          "description": card.description,
+          "imageUrl": card.imageUrl,
+          "time": card.time,
+        }),
+      );
+    } catch (e) {
+      print("Error saving bookmark: $e");
+    }
   }
 
   Future<void> _speak(String text) async {
@@ -65,21 +237,9 @@ class _HomeScreenState extends State<HomeScreen> {
     await flutterTts.speak(text);
   }
 
-  @override
-  void dispose() {
-    flutterTts.stop();
-    super.dispose();
-  }
-
-  // 3. Fetch and Filter Logic
   Future<void> fetchNews(String category) async {
-    setState(() {
-      isLoading = true;
-    });
-
-    // Make sure this URL is correct for your emulator (10.0.2.2 usually)
+    setState(() => isLoading = true);
     final url = Uri.parse('http://10.0.2.2:8080/api/news/feed');
-
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -87,45 +247,49 @@ class _HomeScreenState extends State<HomeScreen> {
         List<NewsCard> allCards = data
             .map((json) => NewsCard.fromJson(json))
             .toList();
-
-        // Database Matching: Checks if DB 'topic' contains the category name
         if (category != "All") {
-          allCards = allCards.where((c) {
-            return c.topic.toLowerCase().contains(category.toLowerCase());
-          }).toList();
+          allCards = allCards
+              .where(
+                (c) => c.topic.toLowerCase().contains(category.toLowerCase()),
+              )
+              .toList();
         }
-
         setState(() {
           cards = allCards;
           isLoading = false;
         });
       } else {
         setState(() => isLoading = false);
-        print("Server error: ${response.statusCode}");
       }
     } catch (e) {
       setState(() => isLoading = false);
-      print("Error fetching news: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5), // Cream background
-      floatingActionButton: const VoiceAssistantButton(),
+      backgroundColor: const Color(0xFFFFF9E5),
+
+      // ✅ 3. REPLACED VoiceAssistantButton with FOX FAB
+      floatingActionButton: SizedBox(
+        width: 70,
+        height: 70,
+        child: FloatingActionButton(
+          onPressed: _showChatModal,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Image.asset('assets/fox.png', fit: BoxFit.contain),
+        ),
+      ),
+
       bottomNavigationBar: _buildBottomNavBar(),
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
-
-            // SCROLLABLE CATEGORY TABS
             _buildCategoryTabs(),
-
             const SizedBox(height: 10),
-
-            // Main Content Area
             Expanded(
               child: isLoading
                   ? const Center(
@@ -134,7 +298,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   : cards.isEmpty
                   ? _buildEmptyState()
                   : CardSwiper(
-                      // FIX: Dynamic cards count prevents "RangeError" crash
                       cardsCount: cards.length,
                       numberOfCardsDisplayed: cards.length < 3
                           ? cards.length
@@ -153,7 +316,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 4. Scrollable Category Tabs with Mouse Support
+  // ... (Keep existing Helper Widgets: _buildCategoryTabs, _buildEmptyState, _buildHeader, _buildNewsCard, _iconWithAction, _buildBottomNavBar, _navItem)
+
   Widget _buildCategoryTabs() {
     return SizedBox(
       height: 60,
@@ -171,9 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return Center(
               child: GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _selectedCategoryIndex = index;
-                  });
+                  setState(() => _selectedCategoryIndex = index);
                   fetchNews(_categories[index]);
                 },
                 child: Container(
@@ -218,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const Icon(Icons.search_off, size: 50, color: Colors.grey),
           const SizedBox(height: 10),
           Text(
-            "No news found for ${_categories[_selectedCategoryIndex]}.",
+            "No news found.",
             style: GoogleFonts.poppins(color: Colors.black54),
           ),
           const SizedBox(height: 20),
@@ -247,9 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.black87,
                 ),
                 onPressed: () {
-                  if (Navigator.canPop(context)) {
-                    Navigator.of(context).pop();
-                  }
+                  if (Navigator.canPop(context)) Navigator.of(context).pop();
                 },
               ),
               Text(
@@ -275,19 +435,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 5. Card Design with Image and Gradient Overlay
   Widget _buildNewsCard(NewsCard card, int index) {
     final List<Color> cardColors = [
-      const Color(0xFFFEF08A), // Yellow
-      const Color(0xFFBFDBFE), // Blue
-      const Color(0xFFBBF7D0), // Green
+      const Color(0xFFFEF08A),
+      const Color(0xFFBFDBFE),
+      const Color(0xFFBBF7D0),
     ];
     final cardColor = cardColors[index % cardColors.length];
-
     String displayTopic = card.topic.contains(',')
         ? card.topic.split(',')[0].trim()
         : card.topic;
-
+    bool isSaved = _savedCardIds.contains(card.id);
     return Container(
       decoration: BoxDecoration(
         color: cardColor,
@@ -303,7 +461,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // IMAGE SECTION
           Expanded(
             flex: 5,
             child: Container(
@@ -313,17 +470,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   top: Radius.circular(30),
                 ),
                 image: DecorationImage(
-                  // FIX: Use the actual image URL from the card
                   image: NetworkImage(card.imageUrl),
                   fit: BoxFit.cover,
-                  onError: (exception, stackTrace) {
-                    // Fallback handled by Image widget or error builder if needed
-                  },
+                  onError: (exception, stackTrace) {},
                 ),
               ),
               child: Stack(
                 children: [
-                  // Gradient Overlay
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
@@ -338,7 +491,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  // Topic Tag
                   Positioned(
                     top: 20,
                     left: 20,
@@ -365,8 +517,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
-          // TEXT CONTENT SECTION
           Expanded(
             flex: 4,
             child: Padding(
@@ -374,9 +524,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // TITLE (Headline)
                   Text(
-                    card.title, // Use the real title now
+                    card.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -387,9 +536,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // DESCRIPTION (Summary)
                   Text(
-                    card.description, // Use the real description
+                    card.description,
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.poppins(
@@ -402,25 +550,36 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
-          // ACTION BUTTONS SECTION
           Padding(
             padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
             child: Row(
               children: [
-                _iconWithAction(Icons.access_time, () {}),
+                _iconWithAction(
+                  Icons.access_time,
+                  const Color(0xFF4B5563),
+                  () {},
+                ),
                 const SizedBox(width: 5),
                 Text(
                   card.time,
                   style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-                ), // Show Time
+                ),
                 const SizedBox(width: 15),
-                _iconWithAction(Icons.sentiment_satisfied_alt, () {}),
+                _iconWithAction(
+                  Icons.sentiment_satisfied_alt,
+                  const Color(0xFF4B5563),
+                  () {},
+                ),
                 const Spacer(),
-                _iconWithAction(Icons.bookmark_border, () {}),
+                _iconWithAction(
+                  isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  isSaved ? Colors.orange : const Color(0xFF4B5563),
+                  () => _saveBookmark(card),
+                ),
                 const SizedBox(width: 15),
                 _iconWithAction(
                   Icons.volume_up_outlined,
+                  const Color(0xFF4B5563),
                   () => _speak("${card.title}. ${card.description}"),
                 ),
               ],
@@ -431,10 +590,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _iconWithAction(IconData icon, VoidCallback onTap) {
+  Widget _iconWithAction(IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
-      child: Icon(icon, size: 24, color: const Color(0xFF4B5563)),
+      child: Icon(icon, size: 24, color: color),
     );
   }
 

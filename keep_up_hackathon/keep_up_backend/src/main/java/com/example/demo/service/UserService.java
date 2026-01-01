@@ -1,23 +1,19 @@
 package com.example.demo.service;
 
 import com.example.demo.model.User;
+import com.example.demo.model.Toon; // Import your Toon/News model
 import com.google.cloud.firestore.Firestore;
-import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import com.google.cloud.firestore.DocumentSnapshot;  // <--- This fixes your specific error
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.Query;
+import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.google.cloud.firestore.Query;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
+
 @Service
 public class UserService {
 
@@ -30,14 +26,12 @@ public class UserService {
     // 1. Create User (When they first open the app)
     public String createUser(String userId, String username) {
         User newUser = new User(userId, username);
-        // We set the document ID to match the User ID so it's easy to find later
         firestore.collection("users").document(userId).set(newUser);
         return "User created: " + username;
     }
 
     // 2. Add XP (When they win a quiz)
     public String addXp(String userId, int points) throws ExecutionException, InterruptedException {
-        // Find the user
         var docRef = firestore.collection("users").document(userId);
         User user = docRef.get().get().toObject(User.class);
 
@@ -45,32 +39,31 @@ public class UserService {
             int newScore = user.getXp() + points;
             user.setXp(newScore);
 
-            // Logic: Promote to Silver at 100 XP, Gold at 500 XP
+            // Promotion Logic
             if (newScore >= 500) user.setLeague("Gold");
             else if (newScore >= 100) user.setLeague("Silver");
 
-            // Save the updated user back to the database
             docRef.set(user);
             return "XP Updated! New Score: " + newScore + " (" + user.getLeague() + ")";
         }
         return "User not found!";
     }
 
-    // 3. Get User Info (To show on the profile screen)
+    // 3. Get User Info
     public User getUser(String userId) throws ExecutionException, InterruptedException {
         return firestore.collection("users").document(userId).get().get().toObject(User.class);
     }
-    // 4. The "End of Season" Promotion Logic
-    // 4. The "End of Season" Promotion Logic (Handling ALL Leagues)
+
+    // 4. End of Season Promotion Logic
     public String promoteTopPlayers() throws ExecutionException, InterruptedException {
         int promotedToGold = 0;
         int promotedToSilver = 0;
 
-        // --- PHASE 1: Promote Silver -> Gold (Run this FIRST) ---
+        // PHASE 1: Silver -> Gold
         var silverQuery = firestore.collection("users")
                 .whereEqualTo("league", "Silver")
-                .orderBy("xp", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                .limit(5); // Let's say Top 5 go to Gold
+                .orderBy("xp", Query.Direction.DESCENDING)
+                .limit(5);
 
         var silverDocs = silverQuery.get().get().getDocuments();
         for (var doc : silverDocs) {
@@ -82,11 +75,11 @@ public class UserService {
             }
         }
 
-        // --- PHASE 2: Promote Bronze -> Silver (Run this SECOND) ---
+        // PHASE 2: Bronze -> Silver
         var bronzeQuery = firestore.collection("users")
                 .whereEqualTo("league", "Bronze")
-                .orderBy("xp", com.google.cloud.firestore.Query.Direction.DESCENDING)
-                .limit(10); // Top 10 go to Silver
+                .orderBy("xp", Query.Direction.DESCENDING)
+                .limit(10);
 
         var bronzeDocs = bronzeQuery.get().get().getDocuments();
         for (var doc : bronzeDocs) {
@@ -101,47 +94,40 @@ public class UserService {
         return "Season Ended! 🥇 " + promotedToGold + " moved to Gold. 🥈 " + promotedToSilver + " moved to Silver.";
     }
 
-    // 5. Get Global Leaderboard (Simple Version)
-    // Returns the top 20 players in a specific league
-    public java.util.List<User> getLeaderboard(String league) throws ExecutionException, InterruptedException {
+    // 5. Get League Leaderboard
+    public List<User> getLeaderboard(String league) throws ExecutionException, InterruptedException {
         var query = firestore.collection("users")
                 .whereEqualTo("league", league)
-                .orderBy("xp", com.google.cloud.firestore.Query.Direction.DESCENDING)
+                .orderBy("xp", Query.Direction.DESCENDING)
                 .limit(20);
 
         return query.get().get().toObjects(User.class);
     }
-    // --- NEW: ADD THESE METHODS FOR THE FLUTTER APP ---
 
-    // 6. Global Leaderboard (For the Mobile App)
-    // We map your "User" object to the exact JSON format the Flutter App expects
-    public java.util.List<java.util.Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
-        java.util.List<java.util.Map<String, Object>> response = new java.util.ArrayList<>();
+    // 6. Global Leaderboard (For Mobile App)
+    public List<Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
+        List<Map<String, Object>> response = new ArrayList<>();
 
-        // Get top 10 users regardless of league
         var query = firestore.collection("users")
-                .orderBy("xp", com.google.cloud.firestore.Query.Direction.DESCENDING)
+                .orderBy("xp", Query.Direction.DESCENDING)
                 .limit(10)
                 .get()
                 .get();
 
         for (var doc : query.getDocuments()) {
             User user = doc.toObject(User.class);
-            java.util.Map<String, Object> map = new java.util.HashMap<>();
-            // MAP JAVA FIELDS -> FLUTTER FIELDS
-            map.put("id", user.getUserId());     // Java: userId -> Flutter: id
-            map.put("name", user.getUsername()); // Java: username -> Flutter: name
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", user.getUserId());
+            map.put("name", user.getUsername());
             map.put("xp", user.getXp());
             response.add(map);
         }
         return response;
     }
 
-    // 7. Init Dummy Data (To populate the list instantly)
+    // 7. Init Dummy Data
     public String initDummyData() {
         try {
-            // Using your existing createUser/addLogic would be cleaner,
-            // but let's write directly to DB for speed.
             createDummy("user_1", "Hacker (You)", 1250, "Gold");
             createDummy("user_2", "Alice", 1400, "Gold");
             createDummy("user_3", "Bob", 800, "Silver");
@@ -159,33 +145,71 @@ public class UserService {
         u.setLeague(league);
         firestore.collection("users").document(id).set(u);
     }
-    // 8. Get User Profile with Dynamic Rank & Streak
+
+    // 8. Get User Profile with Rank
     public Map<String, Object> getUserProfile(String userId) throws ExecutionException, InterruptedException {
-        // A. Get the specific user
         DocumentSnapshot userDoc = firestore.collection("users").document(userId).get().get();
         if (!userDoc.exists()) return null;
 
         User user = userDoc.toObject(User.class);
 
-        // B. Calculate Rank (Expensive but fine for hackathons)
-        // We fetch everyone, sort by XP, and find where this user sits.
+        // Calculate Rank
         var allUsers = getGlobalLeaderboard();
         int rank = 0;
-
         for (int i = 0; i < allUsers.size(); i++) {
             if (allUsers.get(i).get("id").equals(userId)) {
-                rank = i + 1; // Rank is Index + 1
+                rank = i + 1;
                 break;
             }
         }
 
-        // C. Build Response
         Map<String, Object> response = new HashMap<>();
         response.put("xp", user.getXp());
-        response.put("rank", rank > 0 ? rank : "-"); // If not found, show "-"
-        response.put("streak", 3); // Hardcoded to 3 for now (Logic requires daily tracking)
+        response.put("rank", rank > 0 ? rank : "-");
+        response.put("streak", 3);
         response.put("username", user.getUsername());
 
         return response;
+    }
+
+    // ==========================================
+    //      NEW BOOKMARK METHODS (Added)
+    // ==========================================
+
+    // 9. Add Bookmark
+    public String addBookmark(String userId, Toon newsItem) {
+        try {
+            firestore.collection("users").document(userId)
+                    .collection("bookmarks").document(newsItem.getId())
+                    .set(newsItem);
+            return "Bookmarked!";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error adding bookmark: " + e.getMessage();
+        }
+    }
+
+    // 10. Remove Bookmark
+    public String removeBookmark(String userId, String newsId) {
+        try {
+            firestore.collection("users").document(userId)
+                    .collection("bookmarks").document(newsId)
+                    .delete();
+            return "Removed!";
+        } catch (Exception e) {
+            return "Error removing bookmark";
+        }
+    }
+
+    // 11. Get All Bookmarks
+    public List<Toon> getBookmarks(String userId) throws ExecutionException, InterruptedException {
+        List<Toon> bookmarks = new ArrayList<>();
+        var future = firestore.collection("users").document(userId).collection("bookmarks").get();
+        List<QueryDocumentSnapshot> docs = future.get().getDocuments();
+
+        for (QueryDocumentSnapshot doc : docs) {
+            bookmarks.add(doc.toObject(Toon.class));
+        }
+        return bookmarks;
     }
 }

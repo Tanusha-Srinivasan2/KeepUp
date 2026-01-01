@@ -13,40 +13,41 @@ import java.util.concurrent.ExecutionException;
 public class CatchUpService {
 
     private final Firestore db;
-    private final VertexAiService vertexAiService;
 
-    public CatchUpService(Firestore db, VertexAiService vertexAiService) {
+    // Remove VertexAiService from here since the Controller now handles generation
+    public CatchUpService(Firestore db) {
         this.db = db;
-        this.vertexAiService = vertexAiService;
     }
 
-    public String getDailyCatchUp(String region) throws ExecutionException, InterruptedException {
-        // 1. Generate a unique ID for today (e.g., "summary_US_2025-12-28")
-        String todayDate = LocalDate.now().toString();
-        String docId = "summary_" + region + "_" + todayDate;
+    // 1. READ CACHE: Check if we have a summary for today
+    public String getTodaySummary() throws ExecutionException, InterruptedException {
+        String todayDate = LocalDate.now().toString(); // e.g., "2025-12-31"
+        String docId = "summary_" + todayDate;
 
-        // 2. Check if we already have it in Firestore
+        // Check Firestore
         DocumentSnapshot doc = db.collection("daily_catchup").document(docId).get().get();
 
         if (doc.exists()) {
-            System.out.println("✅ Found cached summary for " + todayDate);
-            // Return the stored JSON string directly
+            System.out.println("✅ Found cached CatchUp summary for " + todayDate);
             return doc.getString("jsonContent");
         }
 
-        // 3. If NOT found, Generate it using AI
-        System.out.println("⚡ Generating new summary for " + todayDate);
-        String newJsonContent = vertexAiService.generateCatchUpContent(region);
+        // Return null if nothing is found (tells Controller to generate new one)
+        return null;
+    }
 
-        // 4. Save it to Firestore for next time
+    // 2. WRITE CACHE: Save the new AI summary to Firestore
+    public void saveDailyCatchUp(String jsonContent) {
+        String todayDate = LocalDate.now().toString();
+        String docId = "summary_" + todayDate;
+
         Map<String, Object> data = new HashMap<>();
         data.put("date", todayDate);
-        data.put("region", region);
-        data.put("jsonContent", newJsonContent);
+        data.put("jsonContent", jsonContent);
         data.put("createdAt", System.currentTimeMillis());
 
+        // Save to "daily_catchup" collection
         db.collection("daily_catchup").document(docId).set(data);
-
-        return newJsonContent;
+        System.out.println("💾 CatchUp summary saved to Firestore: " + docId);
     }
 }
