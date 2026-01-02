@@ -63,7 +63,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ UPDATED: Modified to return Future so RefreshIndicator knows when it's done
   Future<void> _fetchUserData() async {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
@@ -82,7 +81,6 @@ class _LandingPageState extends State<LandingPage> {
     setState(() => username = storedName ?? "Reader");
 
     try {
-      // Add a random param to prevent caching if needed, though usually not required for GET
       final url = Uri.parse('http://10.0.2.2:8080/api/news/user/$userId');
       final response = await http.get(url);
 
@@ -347,7 +345,10 @@ class _LandingPageState extends State<LandingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFFF9E5),
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.brown),
@@ -376,14 +377,12 @@ class _LandingPageState extends State<LandingPage> {
           ],
         ),
       ),
-      // ✅ ADDED REFRESH INDICATOR HERE
       body: RefreshIndicator(
-        onRefresh: _fetchUserData, // Pull down triggers this
+        onRefresh: _fetchUserData,
         color: KeepUpApp.primaryYellow,
         backgroundColor: Colors.white,
         child: SingleChildScrollView(
-          physics:
-              const AlwaysScrollableScrollPhysics(), // Ensures you can scroll even if content is short
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,20 +512,59 @@ class _LandingPageState extends State<LandingPage> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      // ✅ NAV BAR WITH NO SHADOW
+      bottomNavigationBar: Container(
+        height: 90,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFF9E5), // Matches Scaffold Background
+          borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+          // NO SHADOW HERE
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavItem(Icons.home_outlined, "Home", 0),
+            _buildNavItem(Icons.explore_outlined, "Explore", 1),
+            _buildNavItem(Icons.leaderboard_outlined, "Rank", 2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    bool isSelected = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => _onItemTapped(index),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: isSelected
+                ? BoxDecoration(
+                    color: const Color(0xFF2D2D2D),
+                    borderRadius: BorderRadius.circular(20),
+                  )
+                : null,
+            child: Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey,
+              size: 26,
+            ),
+          ),
+          if (!isSelected) ...[
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: KeepUpApp.textColor,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        onTap: _onItemTapped,
-        backgroundColor: Colors.white,
-        elevation: 10,
-        type: BottomNavigationBarType.fixed,
       ),
     );
   }

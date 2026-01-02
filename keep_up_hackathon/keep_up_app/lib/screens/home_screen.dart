@@ -10,7 +10,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
 
 import '../models/news_model.dart';
-import 'news_detail_screen.dart'; // ✅ Import the Detail Screen
+import 'news_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -44,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
     "Entertainment",
   ];
   int _selectedCategoryIndex = 0;
-
   DateTime? _selectedDate;
 
   @override
@@ -110,7 +109,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> fetchNews(String category) async {
     setState(() => isLoading = true);
-
     String baseUrl = 'http://10.0.2.2:8080/api/news/feed';
 
     if (_selectedDate != null) {
@@ -120,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final response = await http.get(Uri.parse(baseUrl));
-
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         List<NewsCard> allCards = data
@@ -313,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5),
+      backgroundColor: const Color(0xFFFFF9E5), // Matches Aesthetic
       floatingActionButton: SizedBox(
         width: 70,
         height: 70,
@@ -324,7 +321,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Image.asset('assets/fox.png', fit: BoxFit.contain),
         ),
       ),
+      // ✅ AESTHETIC NAV BAR (Visual Only for this screen)
       bottomNavigationBar: _buildBottomNavBar(),
+
       body: SafeArea(
         child: Column(
           children: [
@@ -356,6 +355,61 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // ✅ UPDATED NAV BAR CODE
+  Widget _buildBottomNavBar() {
+    return Container(
+      height: 90,
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFF9E5), // Matches Scaffold Background seamlessly
+        borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+        // NO SHADOW
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _navItem(Icons.home_outlined, "Home", false),
+          _navItem(Icons.explore, "Explore", true), // Highlighted
+          _navItem(Icons.leaderboard_outlined, "Rank", false),
+        ],
+      ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, bool isSelected) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: isSelected
+              ? BoxDecoration(
+                  color: const Color(0xFF2D2D2D), // Dark Pill
+                  borderRadius: BorderRadius.circular(20),
+                )
+              : null,
+          child: Icon(
+            icon,
+            color: isSelected ? Colors.white : Colors.grey,
+            size: 26,
+          ),
+        ),
+        if (!isSelected) ...[
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ... (Rest of your Widgets: _buildCategoryTabs, _buildEmptyState, _buildHeader, _buildNewsCard, _iconWithAction stay the same) ...
 
   Widget _buildCategoryTabs() {
     return SizedBox(
@@ -507,7 +561,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ UPDATED: Click to Open Detail Screen
   Widget _buildNewsCard(NewsCard card, int index) {
     final List<Color> cardColors = [
       const Color(0xFFFEF08A),
@@ -555,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   image: DecorationImage(
                     image: NetworkImage(card.imageUrl),
                     fit: BoxFit.cover,
-                    onError: (exception, stackTrace) {},
+                    onError: (e, s) {},
                   ),
                 ),
                 child: Stack(
@@ -681,48 +734,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Icon(icon, size: 24, color: color),
-    );
-  }
-
-  Widget _buildBottomNavBar() {
-    return Container(
-      height: 80,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _navItem(Icons.home_outlined, "Home", false),
-          _navItem(Icons.explore, "Explore", true),
-          _navItem(Icons.person_outline, "Profile", false),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem(IconData icon, String label, bool isSelected) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: isSelected
-              ? BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(16),
-                )
-              : null,
-          child: Icon(icon, color: isSelected ? Colors.white : Colors.grey),
-        ),
-        if (isSelected) const SizedBox(height: 4),
-        if (!isSelected)
-          Text(
-            label,
-            style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey),
-          ),
-      ],
     );
   }
 }

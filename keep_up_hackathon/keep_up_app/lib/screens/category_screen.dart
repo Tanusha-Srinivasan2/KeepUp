@@ -5,37 +5,37 @@ import 'home_screen.dart';
 class CategoryScreen extends StatelessWidget {
   const CategoryScreen({super.key});
 
-  // Data for the cards: Name, Image URL, and Base Color
+  // Data for the cards
   final List<Map<String, dynamic>> categories = const [
     {
       "name": "Technology",
       "image":
-          "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop", // Robot/Chip
-      "color": Color(0xFFFFF9C4), // Light Yellow
+          "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000&auto=format&fit=crop",
+      "color": Color(0xFFFFF9C4),
     },
     {
       "name": "Business",
       "image":
-          "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000&auto=format&fit=crop", // Graphs
-      "color": Color(0xFFFFE082), // Amber
+          "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000&auto=format&fit=crop",
+      "color": Color(0xFFFFE082),
     },
     {
       "name": "Science",
       "image":
-          "https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=1000&auto=format&fit=crop", // Lab/DNA
-      "color": Color(0xFFFFCC80), // Orange tint
+          "https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=1000&auto=format&fit=crop",
+      "color": Color(0xFFFFCC80),
     },
     {
       "name": "Politics",
       "image":
-          "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=1000&auto=format&fit=crop", // Runner
-      "color": Color(0xFFFFB74D), // Deep Orange tint
+          "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=1000&auto=format&fit=crop",
+      "color": Color(0xFFFFB74D),
     },
     {
       "name": "Sports",
       "image":
-          "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000&auto=format&fit=crop", // Basketball
-      "color": Color(0xFFFFA726), // Darker Orange
+          "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000&auto=format&fit=crop",
+      "color": Color(0xFFFFA726),
     },
   ];
 
@@ -43,7 +43,7 @@ class CategoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5), // Light Cream Background
-      // Custom Bottom Navigation Bar (Visual only, to match image)
+      // ✅ AESTHETIC NAV BAR (Visual Only)
       bottomNavigationBar: _buildBottomNavBar(),
 
       body: SafeArea(
@@ -59,13 +59,20 @@ class CategoryScreen extends StatelessWidget {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.arrow_back_ios,
-                      color: Color(0xFF4A4A4A),
-                      size: 20,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Color(0xFF2D2D2D),
+                        size: 18,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 15),
                   Text(
                     "Categories",
                     style: GoogleFonts.poppins(
@@ -113,54 +120,46 @@ class CategoryScreen extends StatelessWidget {
         );
       },
       child: Container(
-        height: 120, // Height of the card
-        clipBehavior: Clip
-            .antiAlias, // Ensures image doesn't bleed out of rounded corners
+        height: 120,
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          // Fallback color if image fails
+          borderRadius: BorderRadius.circular(25), // More rounded
           color: category['color'],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Stack(
           children: [
-            // LAYER 1: The Image (Aligned to the Right)
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
-              width: 180, // Takes up roughly half the card width
+              width: 180,
               child: Image.network(
                 category['image'],
                 fit: BoxFit.cover,
-                errorBuilder: (c, o, s) =>
-                    Container(color: Colors.grey), // Error handling
+                errorBuilder: (c, o, s) => Container(color: Colors.grey),
               ),
             ),
-
-            // LAYER 2: The Gradient Overlay (Left to Right)
-            // This creates the smooth fade from the solid color to the image
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    category['color'], // Solid color on the left (behind text)
-                    category['color'], // Stays solid for a bit
-                    category['color'].withOpacity(
-                      0.0,
-                    ), // Fades to transparent over image
+                    category['color'],
+                    category['color'],
+                    category['color'].withOpacity(0.0),
                   ],
-                  stops: const [
-                    0.0,
-                    0.4,
-                    1.0,
-                  ], // Adjust these stops to control the fade point
+                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
             ),
-
-            // LAYER 3: The Text
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
@@ -170,7 +169,7 @@ class CategoryScreen extends StatelessWidget {
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF333333), // Dark Grey Text
+                    color: const Color(0xFF2D2D2D),
                   ),
                 ),
               ),
@@ -181,20 +180,20 @@ class CategoryScreen extends StatelessWidget {
     );
   }
 
-  // Same Bottom Bar as Home Screen for consistency
+  // ✅ UPDATED NAV BAR
   Widget _buildBottomNavBar() {
     return Container(
-      height: 80,
+      height: 90,
       decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        color: Color(0xFFFFF9E5), // Matches Scaffold Background seamlessly
+        borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _navItem(Icons.home_outlined, "Home", false),
           _navItem(Icons.explore, "Explore", true), // Highlighted
-          _navItem(Icons.person_outline, "Profile", false),
+          _navItem(Icons.leaderboard_outlined, "Rank", false),
         ],
       ),
     );
@@ -205,22 +204,30 @@ class CategoryScreen extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: isSelected
               ? BoxDecoration(
-                  color: const Color(
-                    0xFF2D2D2D,
-                  ), // Dark background for selected
-                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0xFF2D2D2D), // Dark Pill
+                  borderRadius: BorderRadius.circular(20),
                 )
               : null,
-          child: Icon(icon, color: isSelected ? Colors.white : Colors.grey),
+          child: Icon(
+            icon,
+            color: isSelected ? Colors.white : Colors.grey,
+            size: 26,
+          ),
         ),
-        if (!isSelected)
+        if (!isSelected) ...[
+          const SizedBox(height: 4),
           Text(
             label,
-            style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey),
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
           ),
+        ],
       ],
     );
   }
