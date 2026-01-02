@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 @Service
 public class NewsIndexingService {
@@ -96,5 +97,25 @@ public class NewsIndexingService {
         }
 
         return newsList;
+    }
+    public List<Toon> searchNewsByKeywords(String keywordString) {
+        if (keywordString == null || keywordString.isEmpty()) return new ArrayList<>();
+
+        // 1. Fetch recent news (e.g., last 50 items) to search against
+        List<Toon> recentNews = getAllNewsSegments(null);
+
+        String[] keywords = keywordString.toLowerCase().split("\\s+"); // Split by spaces
+
+        return recentNews.stream()
+                .filter(toon -> {
+                    String content = (toon.getTitle() + " " + toon.getDescription() + " " + toon.getTopic()).toLowerCase();
+                    // Match IF content contains ANY of the keywords
+                    for (String key : keywords) {
+                        if (content.contains(key)) return true;
+                    }
+                    return false;
+                })
+                .limit(3) // Limit to top 3 matches to save tokens
+                .collect(Collectors.toList());
     }
 }

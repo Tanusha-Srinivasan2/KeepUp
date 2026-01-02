@@ -5,6 +5,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.vertexai.gemini.VertexAiGeminiChatOptions;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class VertexAiService {
@@ -118,24 +119,54 @@ public class VertexAiService {
         )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
     }
 
-    // PHASE 4: Chat Assistant (Unchanged)
-    public String chatWithNews(String userQuestion, String newsContext) {
+    // ✅ OPTIMIZATION 1: Extract Keywords (Cheap & Fast)
+    public String extractSearchKeywords(String userQuestion) {
+        String prompt = """
+            Extract 1-3 most important search keywords or proper nouns from this question. 
+            Output ONLY the keywords separated by spaces. No text.
+            Question: "%s"
+            """.formatted(userQuestion);
+
+        return chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder()
+                        .model("gemini-2.5-flash") // Cheapest model
+                        .temperature(0.0) // Deterministic
+                        .build()
+        )).getResult().getOutput().getText().trim();
+    }
+
+    // ✅ OPTIMIZATION 2: Smart Chat Router (RAG + Fallback)
+    public String chatWithSmartRouting(String userQuestion, List<String> localMatches) {
+        boolean foundLocalNews = !localMatches.isEmpty();
+        String context;
+
+        if (foundLocalNews) {
+            // CASE A: Local Match Found -> Google Search OFF (Save Money)
+            System.out.println("✅ Local Match Found! Using Database Context.");
+            context = "LOCAL NEWS CONTEXT:\n" + String.join("\n---\n", localMatches);
+        } else {
+            // CASE B: No Match -> Google Search ON (Fallback)
+            System.out.println("🌍 No Match. Google Search ON (Fallback).");
+            context = "No local news found. Please search Google to answer.";
+        }
+
         String systemPrompt = """
             You are 'KeepUp', a smart AI assistant.
             
             INSTRUCTIONS:
-            1. PRIORITY: Check the 'NEWS CONTEXT' below. If the answer is there, use it.
-            2. FALLBACK: If the answer is NOT in the context, use your General Knowledge and Google Search to answer.
-            3. DO NOT say "I don't know" or "It's not in the context". Always provide an answer.
-            4. Keep answers under 3 lines.
+            1. Use the provided Context or Google Search to answer.
+            2. If using Context, cite the specific story.
+            3. Keep answers under 3 lines.
             
-            NEWS CONTEXT:
-            """ + newsContext;
+            CONTEXT:
+            """ + context;
 
         return chatModel.call(new Prompt(systemPrompt + "\nUser: " + userQuestion,
                 VertexAiGeminiChatOptions.builder()
                         .model("gemini-2.5-flash")
-                        .googleSearchRetrieval(true)
+                        .temperature(0.3)
+                        // ✅ MAGIC SWITCH: True ONLY if local search failed
+                        .googleSearchRetrieval(!foundLocalNews)
                         .build()
         )).getResult().getOutput().getText();
     }

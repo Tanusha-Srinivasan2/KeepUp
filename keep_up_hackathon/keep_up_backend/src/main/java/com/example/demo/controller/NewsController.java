@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/news")
@@ -93,13 +94,20 @@ public class NewsController {
 
     @GetMapping("/chat")
     public String chatWithNews(@RequestParam String question) {
-        List<Toon> allNews = newsIndexingService.getAllNewsSegments(null);
-        if (allNews.isEmpty()) return "No news context available.";
-        StringBuilder contextBuilder = new StringBuilder();
-        for (Toon segment : allNews) {
-            contextBuilder.append(segment.toToonString()).append("\n");
-        }
-        return vertexAiService.chatWithNews(question, contextBuilder.toString());
+        // 1. Get Keywords (Cheap)
+        String keywords = vertexAiService.extractSearchKeywords(question);
+        System.out.println("🔍 Search Keywords: " + keywords);
+
+        // 2. Search Database (Free)
+        List<Toon> matches = newsIndexingService.searchNewsByKeywords(keywords);
+
+        // 3. Prepare Content
+        List<String> matchStrings = matches.stream()
+                .map(t -> t.getTitle() + ": " + t.getDescription())
+                .collect(Collectors.toList());
+
+        // 4. Generate Answer (Smart Cost Routing)
+        return vertexAiService.chatWithSmartRouting(question, matchStrings);
     }
 
     @PostMapping("/user/{userId}/bookmark")

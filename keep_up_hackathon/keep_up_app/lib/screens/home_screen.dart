@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 
 import '../models/news_model.dart';
 import 'news_detail_screen.dart';
+import 'ai_response_screen.dart'; // ✅ Ensure this file exists
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -93,17 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
+      setState(() => _selectedDate = picked);
       fetchNews(_categories[_selectedCategoryIndex]);
     }
   }
 
   void _clearDateFilter() {
-    setState(() {
-      _selectedDate = null;
-    });
+    setState(() => _selectedDate = null);
     fetchNews(_categories[_selectedCategoryIndex]);
   }
 
@@ -154,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ CHAT SHEET (Tap to Toggle)
   Widget _buildChatSheet() {
     return StatefulBuilder(
       builder: (context, setModalState) {
@@ -206,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         )
                       : Text(
-                          "Tap the mic to ask about news in '${_categories[_selectedCategoryIndex]}'.",
+                          "Tap the mic to start listening.\nTap again to stop.",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
                             fontSize: 16,
@@ -215,44 +213,53 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                 ),
               ),
+
               GestureDetector(
-                onTapDown: (_) async {
-                  bool available = await _speech.initialize();
+                onTap: () async {
+                  if (_isListening) {
+                    setModalState(() => _isListening = false);
+                    _speech.stop();
+                    return;
+                  }
+
+                  bool available = await _speech.initialize(
+                    onError: (e) => print("Mic Error: $e"),
+                    onStatus: (s) => print("Mic Status: $s"),
+                  );
+
                   if (available) {
                     setModalState(() => _isListening = true);
                     _speech.listen(
                       onResult: (val) async {
-                        if (val.hasConfidenceRating && val.confidence > 0) {
-                          if (val.finalResult) {
-                            setModalState(() {
-                              _isListening = false;
-                              _isThinking = true;
-                            });
-                            await _askAI(val.recognizedWords);
-                            if (mounted) Navigator.pop(context);
-                          }
+                        if (val.finalResult) {
+                          setModalState(() {
+                            _isListening = false;
+                            _isThinking = true;
+                          });
+
+                          // We pass the navigation responsibility to _askAI
+                          await _askAI(val.recognizedWords);
                         }
                       },
                     );
+                  } else {
+                    print("Mic denied or unavailable");
                   }
-                },
-                onTapUp: (_) {
-                  setModalState(() => _isListening = false);
-                  _speech.stop();
                 },
                 child: CircleAvatar(
                   radius: 35,
                   backgroundColor: _isListening ? Colors.red : Colors.orange,
                   child: Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
+                    _isListening ? Icons.stop : Icons.mic,
                     color: Colors.white,
                     size: 30,
                   ),
                 ),
               ),
+
               const SizedBox(height: 10),
               Text(
-                _isListening ? "Listening..." : "Hold to Speak",
+                _isListening ? "Listening... (Tap to stop)" : "Tap to Speak",
                 style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
               ),
             ],
@@ -262,17 +269,43 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ CRITICAL FIX: Closes modal THEN opens screen
   Future<void> _askAI(String question) async {
-    String fullQuestion =
-        "Context: Browsing ${_categories[_selectedCategoryIndex]} news. Question: $question";
-    final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/chat?question=$fullQuestion',
-    );
+    print("🦊 DEBUG: Asking AI -> $question");
+
+    String contextInfo =
+        "Context: Browsing ${_categories[_selectedCategoryIndex]} news.";
+    final url = Uri.http('10.0.2.2:8080', '/api/news/chat', {
+      'question': "$contextInfo Question: $question",
+    });
+
     try {
       final response = await http.get(url);
-      if (response.statusCode == 200) await flutterTts.speak(response.body);
+      print("🦊 DEBUG: Response Code: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+
+        // 1. Close the "Thinking..." Modal
+        Navigator.pop(context);
+
+        // 2. Open the Yellow Answer Screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AiResponseScreen(text: response.body),
+          ),
+        );
+      } else {
+        print("🦊 DEBUG: Server Error ${response.body}");
+        // We can safely speak here because the user is still looking at the error UI
+        await flutterTts.speak("Sorry, the server is having trouble.");
+        if (mounted) Navigator.pop(context);
+      }
     } catch (e) {
-      print("AI Error: $e");
+      print("🦊 DEBUG: Connection Failed -> $e");
+      await flutterTts.speak("I can't reach the server right now.");
+      if (mounted) Navigator.pop(context);
     }
   }
 
@@ -310,18 +343,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5), // Matches Aesthetic
-      floatingActionButton: SizedBox(
-        width: 70,
-        height: 70,
-        child: FloatingActionButton(
-          onPressed: _showChatModal,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
+      backgroundColor: const Color(0xFFFFF9E5),
+
+      floatingActionButton: GestureDetector(
+        onTap: _showChatModal,
+        child: Container(
+          width: 75,
+          height: 75,
+          decoration: const BoxDecoration(shape: BoxShape.circle),
           child: Image.asset('assets/fox.png', fit: BoxFit.contain),
         ),
       ),
-      // ✅ AESTHETIC NAV BAR (Visual Only for this screen)
+
       bottomNavigationBar: _buildBottomNavBar(),
 
       body: SafeArea(
@@ -356,20 +389,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ UPDATED NAV BAR CODE
   Widget _buildBottomNavBar() {
     return Container(
       height: 90,
       decoration: const BoxDecoration(
-        color: Color(0xFFFFF9E5), // Matches Scaffold Background seamlessly
+        color: Color(0xFFFFF9E5),
         borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-        // NO SHADOW
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _navItem(Icons.home_outlined, "Home", false),
-          _navItem(Icons.explore, "Explore", true), // Highlighted
+          _navItem(Icons.explore, "Explore", true),
           _navItem(Icons.leaderboard_outlined, "Rank", false),
         ],
       ),
@@ -384,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(12),
           decoration: isSelected
               ? BoxDecoration(
-                  color: const Color(0xFF2D2D2D), // Dark Pill
+                  color: const Color(0xFF2D2D2D),
                   borderRadius: BorderRadius.circular(20),
                 )
               : null,
@@ -408,8 +439,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
   }
-
-  // ... (Rest of your Widgets: _buildCategoryTabs, _buildEmptyState, _buildHeader, _buildNewsCard, _iconWithAction stay the same) ...
 
   Widget _buildCategoryTabs() {
     return SizedBox(
@@ -544,15 +573,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       : Colors.grey[800],
                 ),
                 onPressed: _pickDate,
-              ),
-              const SizedBox(width: 5),
-              Container(
-                padding: const EdgeInsets.all(8),
-                child: const Icon(
-                  Icons.catching_pokemon,
-                  color: Colors.orange,
-                  size: 30,
-                ),
               ),
             ],
           ),
