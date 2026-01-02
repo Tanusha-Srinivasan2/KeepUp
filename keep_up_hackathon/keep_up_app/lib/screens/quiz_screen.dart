@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_tts/flutter_tts.dart'; // Import TTS
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../models/quiz_model.dart';
-import '../main.dart'; // Import to use KeepUpApp colors
+import '../main.dart'; // KeepUpApp colors
+import 'quiz_result_screen.dart'; // ✅ Import Result Screen
 
 class QuizScreen extends StatefulWidget {
   final List<QuizQuestion> questions;
@@ -23,7 +24,6 @@ class _QuizScreenState extends State<QuizScreen> {
   int score = 0;
   bool isSubmitting = false;
 
-  // TTS Engine
   final FlutterTts flutterTts = FlutterTts();
 
   @override
@@ -32,62 +32,176 @@ class _QuizScreenState extends State<QuizScreen> {
     super.dispose();
   }
 
-  // Helper to make the Fox Speak
   Future<void> _speak(String text) async {
     await flutterTts.setLanguage("en-US");
-    await flutterTts.setPitch(1.1); // Slightly higher pitch for a "Fox" voice
+    await flutterTts.setPitch(1.1);
     await flutterTts.speak(text);
   }
 
   void onOptionSelected(int index) {
     if (isAnswerLocked) return;
-    setState(() {
-      selectedIndex = index;
-    });
+    setState(() => selectedIndex = index);
   }
 
   void onMainButtonClick() {
     if (selectedIndex == null) return;
 
     if (!isAnswerLocked) {
-      // Stage 2: Validate
+      // 1. Validate Answer
       bool isCorrect =
           selectedIndex == widget.questions[currentIndex].correctIndex;
       if (isCorrect) score++;
-
-      setState(() {
-        isAnswerLocked = true;
-      });
+      setState(() => isAnswerLocked = true);
     } else if (!showExplanation) {
-      // Stage 3: Explain
-      setState(() {
-        showExplanation = true;
-      });
-      // Auto-speak the fun fact when it appears
-      _speak(widget.questions[currentIndex].explanation);
+      // 2. Show Explanation (Bottom Sheet)
+      _showResultBottomSheet(
+        selectedIndex == widget.questions[currentIndex].correctIndex,
+        widget.questions[currentIndex],
+      );
     } else {
-      // Next Question
-      flutterTts.stop(); // Stop speaking when moving on
-      if (currentIndex < widget.questions.length - 1) {
-        setState(() {
-          currentIndex++;
-          selectedIndex = null;
-          isAnswerLocked = false;
-          showExplanation = false;
-        });
-      } else {
-        finishQuiz();
-      }
+      // 3. Next Question (Handled by closing the sheet)
+      _nextQuestion();
     }
   }
 
-  Future<void> finishQuiz() async {
+  void _nextQuestion() {
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        selectedIndex = null;
+        isAnswerLocked = false;
+        showExplanation = false;
+      });
+    } else {
+      _finishQuiz();
+    }
+  }
+
+  // Result Sheet with Topic Image & Short Layout
+  void _showResultBottomSheet(bool isCorrect, QuizQuestion question) {
+    setState(() => showExplanation = true);
+    _speak(question.explanation); // Auto-speak
+
+    // Map topics to images
+    Map<String, String> topicImages = {
+      "Technology":
+          "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400",
+      "Sports":
+          "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400",
+      "Business":
+          "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400",
+      "Science":
+          "https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=400",
+      "Politics":
+          "https://images.unsplash.com/photo-1529101091760-6149d4c81f22?w=400",
+      "General":
+          "https://images.unsplash.com/photo-1493612276216-ee3925520721?w=400",
+    };
+
+    String imageUrl = topicImages[question.topic] ?? topicImages["General"]!;
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFF9E5), // Cream
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Takes minimal height
+            children: [
+              Text(
+                isCorrect ? "Correct!" : "Did You Know?",
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: isCorrect ? Colors.green : const Color(0xFF2D2D2D),
+                ),
+              ),
+              const SizedBox(height: 15),
+
+              // Topic Image
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.network(
+                  imageUrl,
+                  height: 150,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      Image.asset('assets/fox.png', height: 150),
+                ),
+              ),
+              const SizedBox(height: 15),
+
+              // Explanation
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Text(
+                  question.explanation,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Continue Button
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () {
+                    flutterTts.stop();
+                    Navigator.pop(context); // Close sheet
+                    _nextQuestion();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D2D2D),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                  child: Text(
+                    currentIndex < widget.questions.length - 1
+                        ? "Next Question"
+                        : "Finish Quiz",
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ✅ UPDATED: Navigates to Result Screen
+  Future<void> _finishQuiz() async {
     setState(() => isSubmitting = true);
 
     int earnedXp = score * 20;
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
 
+    // 1. Send XP to Backend
     if (userId != null && earnedXp > 0) {
       try {
         final url = Uri.parse(
@@ -95,16 +209,23 @@ class _QuizScreenState extends State<QuizScreen> {
         );
         await http.post(url);
       } catch (e) {
-        print("Error: $e");
+        print("Error sending XP: $e");
       }
     }
 
     if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Quiz Complete! +$earnedXp XP"),
-          backgroundColor: KeepUpApp.primaryYellow,
+      // 2. Navigate to Result Screen (Replace QuizScreen so back button goes home)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => QuizResultScreen(
+            score: score,
+            totalQuestions: widget.questions.length,
+            xpEarned: earnedXp,
+            onContinue: () {
+              Navigator.pop(context); // Closes ResultScreen -> Back to Home
+            },
+          ),
         ),
       );
     }
@@ -122,122 +243,16 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     final question = widget.questions[currentIndex];
-
-    // --- VIEW 3: "DID YOU KNOW" EXPLANATION CARD ---
-    if (showExplanation) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFFEFCE0),
-        appBar: AppBar(
-          title: Text(
-            "Did You Know?",
-            style: GoogleFonts.nunito(color: Colors.grey, fontSize: 16),
-          ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: Container(),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.black),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              Container(
-                height: 250,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(
-                  child: Image.asset('assets/fox.png', height: 120),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              Text(
-                "Interesting Fact",
-                textAlign: TextAlign.center,
-                style: GoogleFonts.nunito(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: KeepUpApp.bgPurple,
-                ),
-              ),
-              const SizedBox(height: 15),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Text(
-                    question.explanation,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.nunito(
-                      fontSize: 18,
-                      color: KeepUpApp.textColor.withOpacity(0.8),
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-
-              // --- CLICKABLE FOX (Plays Audio) ---
-              Align(
-                alignment: Alignment.bottomRight,
-                child: GestureDetector(
-                  onTap: () => _speak(question.explanation),
-                  child: Image.asset('assets/fox.png', height: 80),
-                ),
-              ),
-
-              const SizedBox(height: 20), // Space for button
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: onMainButtonClick,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: KeepUpApp.bgPurple,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: Text(
-                    currentIndex < widget.questions.length - 1
-                        ? "Next Question"
-                        : "Finish Quiz",
-                    style: GoogleFonts.nunito(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // --- VIEW 1 & 2: QUESTION & VALIDATION ---
     double progress = (currentIndex + 1) / widget.questions.length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFFEFCE0),
-
-      // --- NEW: FOX AS VOICE ASSISTANT FAB ---
+      // Fox Helper
       floatingActionButton: GestureDetector(
-        onTap: () => _speak(question.question), // Click to read question
+        onTap: () => _speak(question.question),
         child: Container(
-          margin: const EdgeInsets.only(
-            bottom: 60,
-          ), // Move up slightly so it doesn't block "Continue"
-          child: Image.asset('assets/fox.png', height: 90),
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Image.asset('assets/fox.png', height: 80),
         ),
       ),
 
@@ -246,6 +261,7 @@ class _QuizScreenState extends State<QuizScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
+              // Header & Progress
               Row(
                 children: [
                   IconButton(
@@ -267,6 +283,7 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
               const SizedBox(height: 30),
 
+              // Question Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -299,6 +316,7 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
               const SizedBox(height: 20),
 
+              // Options List
               Expanded(
                 child: ListView.separated(
                   itemCount: question.options.length,
@@ -323,12 +341,6 @@ class _QuizScreenState extends State<QuizScreen> {
                       borderColor = const Color(0xFFFFE082);
                     }
 
-                    Color textColor =
-                        (isAnswerLocked &&
-                            (isCorrect || (isSelected && !isCorrect)))
-                        ? Colors.white
-                        : KeepUpApp.bgPurple.withOpacity(0.7);
-
                     return GestureDetector(
                       onTap: () => onOptionSelected(index),
                       child: Container(
@@ -343,12 +355,14 @@ class _QuizScreenState extends State<QuizScreen> {
                         ),
                         child: Text(
                           question.options[index],
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.nunito(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: textColor,
+                            color: isAnswerLocked && (isCorrect || isSelected)
+                                ? Colors.white
+                                : KeepUpApp.bgPurple,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ),
                     );
@@ -356,7 +370,7 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              // Main Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -370,7 +384,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                   ),
                   child: Text(
-                    isAnswerLocked ? "Next" : "Continue",
+                    isAnswerLocked ? "Check" : "Submit",
                     style: GoogleFonts.nunito(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

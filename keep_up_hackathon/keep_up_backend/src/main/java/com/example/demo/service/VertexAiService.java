@@ -61,6 +61,7 @@ public class VertexAiService {
                - Science: "https://images.unsplash.com/photo-1507413245164-6160d8298b31"
                - Business: "https://images.unsplash.com/photo-1460925895917-afdab827c52f"
                - Politics: "https://images.unsplash.com/photo-1529101091760-6149d4c81f22"
+            7. "sourceUrl": Provide a direct link to a credible source (Reuters, BBC, TechCrunch) relevant to this specific story. If unknown, generate a Google Search URL for the title.
             
             SCHEMA:
             [
@@ -70,6 +71,7 @@ public class VertexAiService {
                 "description": "Short summary of the event.",
                 "time": "4h ago",
                 "imageUrl": "https://images.unsplash.com/...",
+                "sourceUrl": "https://www.reuters.com/...",
                 "keywords": ["tag1", "tag2"]
               }
             ]
@@ -90,6 +92,10 @@ public class VertexAiService {
         String prompt = """
             Create a Daily Quiz of 3 questions based on these news facts.
             Output strict JSON only.
+            
+            RULES:
+            1. "explanation": MUST be very short (Max 15 words). Simple language.
+            2. "topic": Must be one of [Technology, Sports, Politics, Business, Science].
             
             SCHEMA:
             [

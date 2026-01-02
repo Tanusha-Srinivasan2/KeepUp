@@ -7,10 +7,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:intl/intl.dart'; // ✅ Required for Date Formatting
+import 'package:intl/intl.dart';
 
 import '../models/news_model.dart';
-import '../widgets/voice_button.dart';
+import 'news_detail_screen.dart'; // ✅ Import the Detail Screen
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -45,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
   int _selectedCategoryIndex = 0;
 
-  // ✅ NEW: Date Filter Variable
   DateTime? _selectedDate;
 
   @override
@@ -74,12 +73,11 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ✅ NEW: Date Picker Function
   Future<void> _pickDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2025), // Adjust based on when your app started
+      firstDate: DateTime(2025),
       lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
@@ -99,12 +97,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _selectedDate = picked;
       });
-      // Re-fetch news with the new date filter
       fetchNews(_categories[_selectedCategoryIndex]);
     }
   }
 
-  // ✅ NEW: Clear Date Filter
   void _clearDateFilter() {
     setState(() {
       _selectedDate = null;
@@ -112,14 +108,11 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchNews(_categories[_selectedCategoryIndex]);
   }
 
-  // ✅ UPDATED: Fetch News with Date Support
   Future<void> fetchNews(String category) async {
     setState(() => isLoading = true);
 
-    // Base URL
     String baseUrl = 'http://10.0.2.2:8080/api/news/feed';
 
-    // If a date is selected, append it to query params
     if (_selectedDate != null) {
       String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
       baseUrl += "?date=$dateStr";
@@ -134,7 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
             .map((json) => NewsCard.fromJson(json))
             .toList();
 
-        // Apply Category Filter locally (since API returns mixed topics for now)
         if (category != "All") {
           allCards = allCards
               .where(
@@ -155,8 +147,6 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => isLoading = false);
     }
   }
-
-  // --- EXISTING FEATURES (Chat, Bookmark, etc.) ---
 
   void _showChatModal() {
     showModalBottomSheet(
@@ -445,14 +435,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ UPDATED HEADER WITH CALENDAR
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 15),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Left Side: Back + Title + Filter Status
           Row(
             children: [
               IconButton(
@@ -476,7 +464,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: const Color(0xFF2D2D2D),
                     ),
                   ),
-                  // Show active filter if present
                   if (_selectedDate != null)
                     GestureDetector(
                       onTap: _clearDateFilter,
@@ -493,11 +480,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-
-          // Right Side: Calendar + Fox
           Row(
             children: [
-              // Calendar Button
               IconButton(
                 icon: Icon(
                   Icons.calendar_today_outlined,
@@ -523,6 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ UPDATED: Click to Open Detail Screen
   Widget _buildNewsCard(NewsCard card, int index) {
     final List<Color> cardColors = [
       const Color(0xFFFEF08A),
@@ -534,146 +519,160 @@ class _HomeScreenState extends State<HomeScreen> {
         ? card.topic.split(',')[0].trim()
         : card.topic;
     bool isSaved = _savedCardIds.contains(card.id);
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NewsDetailScreen(newsItem: card),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 5,
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(30),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(30),
+                  ),
+                  image: DecorationImage(
+                    image: NetworkImage(card.imageUrl),
+                    fit: BoxFit.cover,
+                    onError: (exception, stackTrace) {},
+                  ),
                 ),
-                image: DecorationImage(
-                  image: NetworkImage(card.imageUrl),
-                  fit: BoxFit.cover,
-                  onError: (exception, stackTrace) {},
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.3),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 20,
+                      left: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          displayTopic.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.3),
-                          ],
-                        ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      card.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1F1F1F),
+                        height: 1.2,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      card.description,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: const Color(0xFF4B5563),
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
+              child: Row(
+                children: [
+                  _iconWithAction(
+                    Icons.access_time,
+                    const Color(0xFF4B5563),
+                    () {},
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    card.time,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: Colors.grey,
                     ),
                   ),
-                  Positioned(
-                    top: 20,
-                    left: 20,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        displayTopic.toUpperCase(),
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  const SizedBox(width: 15),
+                  _iconWithAction(
+                    Icons.sentiment_satisfied_alt,
+                    const Color(0xFF4B5563),
+                    () {},
+                  ),
+                  const Spacer(),
+                  _iconWithAction(
+                    isSaved ? Icons.bookmark : Icons.bookmark_border,
+                    isSaved ? Colors.orange : const Color(0xFF4B5563),
+                    () => _saveBookmark(card),
+                  ),
+                  const SizedBox(width: 15),
+                  _iconWithAction(
+                    Icons.volume_up_outlined,
+                    const Color(0xFF4B5563),
+                    () => _speak("${card.title}. ${card.description}"),
                   ),
                 ],
               ),
             ),
-          ),
-          Expanded(
-            flex: 4,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    card.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1F1F1F),
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    card.description,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: const Color(0xFF4B5563),
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
-            child: Row(
-              children: [
-                _iconWithAction(
-                  Icons.access_time,
-                  const Color(0xFF4B5563),
-                  () {},
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  card.time,
-                  style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(width: 15),
-                _iconWithAction(
-                  Icons.sentiment_satisfied_alt,
-                  const Color(0xFF4B5563),
-                  () {},
-                ),
-                const Spacer(),
-                _iconWithAction(
-                  isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  isSaved ? Colors.orange : const Color(0xFF4B5563),
-                  () => _saveBookmark(card),
-                ),
-                const SizedBox(width: 15),
-                _iconWithAction(
-                  Icons.volume_up_outlined,
-                  const Color(0xFF4B5563),
-                  () => _speak("${card.title}. ${card.description}"),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

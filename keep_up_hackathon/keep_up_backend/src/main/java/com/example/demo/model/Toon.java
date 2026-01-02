@@ -16,6 +16,9 @@ public class Toon {
     private String imageUrl;
     private String time;
 
+    // ✅ NEW FIELD: Source Link
+    private String sourceUrl;
+
     // --- EXISTING FIELDS ---
     private String topic;
     private List<String> keywords;
@@ -23,20 +26,20 @@ public class Toon {
 
     public Toon() {} // Required for Firestore
 
-    public Toon(String title, String description, String imageUrl, String time, String topic, List<String> keywords) {
+    public Toon(String title, String description, String imageUrl, String time, String topic, List<String> keywords, String sourceUrl) {
         this.title = title;
         this.description = description;
         this.imageUrl = imageUrl;
         this.time = time;
         this.topic = topic;
         this.keywords = keywords;
+        this.sourceUrl = sourceUrl;
     }
 
     // --- GETTERS AND SETTERS ---
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
-    // ✅ New Getters/Setters for Date Logic
     public long getTimestamp() { return timestamp; }
     public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
 
@@ -54,6 +57,10 @@ public class Toon {
 
     public String getTime() { return time; }
     public void setTime(String time) { this.time = time; }
+
+    // ✅ New Getter and Setter for Source URL
+    public String getSourceUrl() { return sourceUrl; }
+    public void setSourceUrl(String sourceUrl) { this.sourceUrl = sourceUrl; }
 
     public String getTopic() { return topic; }
     public void setTopic(String topic) { this.topic = topic; }

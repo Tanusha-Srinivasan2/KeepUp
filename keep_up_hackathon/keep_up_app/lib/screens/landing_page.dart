@@ -5,18 +5,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:google_sign_in/google_sign_in.dart'; // For Logout
+import 'package:google_sign_in/google_sign_in.dart';
 
-import '../main.dart'; // Colors
+import '../main.dart';
 import '../models/quiz_model.dart';
 
-// Screens
 import 'category_screen.dart';
 import 'leaderboard_screen.dart';
 import 'quiz_screen.dart';
 import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
-import 'auth_screen.dart'; // Required for Redirects
+import 'auth_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -33,7 +32,6 @@ class _LandingPageState extends State<LandingPage> {
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
-  // Voice Variables
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -52,11 +50,10 @@ class _LandingPageState extends State<LandingPage> {
     super.dispose();
   }
 
-  // ✅ 1. LOGOUT FUNCTION
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // Clear local storage
-    await GoogleSignIn().signOut(); // Sign out of Google
+    await prefs.clear();
+    await GoogleSignIn().signOut();
 
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -66,13 +63,12 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ 2. FETCH USER DATA (Redirects if missing)
+  // ✅ UPDATED: Modified to return Future so RefreshIndicator knows when it's done
   Future<void> _fetchUserData() async {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
     String? storedName = prefs.getString('user_name');
 
-    // Security Check: If no ID, go to Login
     if (userId == null) {
       if (mounted) {
         Navigator.pushReplacement(
@@ -86,6 +82,7 @@ class _LandingPageState extends State<LandingPage> {
     setState(() => username = storedName ?? "Reader");
 
     try {
+      // Add a random param to prevent caching if needed, though usually not required for GET
       final url = Uri.parse('http://10.0.2.2:8080/api/news/user/$userId');
       final response = await http.get(url);
 
@@ -104,7 +101,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ 3. EDIT USERNAME LOGIC
   void _showEditNameDialog() {
     TextEditingController nameController = TextEditingController(
       text: username,
@@ -154,7 +150,6 @@ class _LandingPageState extends State<LandingPage> {
     String? userId = prefs.getString('user_id');
     if (userId == null) return;
 
-    // Optimistic Update
     setState(() => username = newName);
     await prefs.setString('user_name', newName);
 
@@ -168,7 +163,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // --- CHAT MODAL LOGIC ---
   void _showChatModal() {
     showModalBottomSheet(
       context: context,
@@ -299,7 +293,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ 4. START QUIZ (With Auto-Refresh)
   Future<void> _startQuiz() async {
     setState(() => isLoadingQuiz = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -315,14 +308,12 @@ class _LandingPageState extends State<LandingPage> {
             .toList();
 
         if (mounted) {
-          // Wait for quiz to finish
           await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => QuizScreen(questions: questions),
             ),
           );
-          // Refresh stats immediately
           _fetchUserData();
         }
       }
@@ -336,7 +327,6 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ 5. BOTTOM NAV (With Auto-Refresh for Leaderboard)
   void _onItemTapped(int index) async {
     if (index == 1) {
       Navigator.push(
@@ -348,7 +338,6 @@ class _LandingPageState extends State<LandingPage> {
         context,
         MaterialPageRoute(builder: (context) => const LeaderboardScreen()),
       );
-      // Refresh rank on return
       _fetchUserData();
     } else {
       setState(() => _selectedIndex = index);
@@ -359,7 +348,6 @@ class _LandingPageState extends State<LandingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // Logout Button
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.brown),
@@ -372,7 +360,6 @@ class _LandingPageState extends State<LandingPage> {
           children: [
             _buildTopStat('assets/lightning.png', xp),
             _buildTopStat('assets/fire.png', streak),
-            // Rank Icon (Updates on Return)
             _buildTopStat(
               'assets/gem.png',
               rank,
@@ -389,132 +376,141 @@ class _LandingPageState extends State<LandingPage> {
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                GestureDetector(
-                  onTap: _showChatModal,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.withOpacity(0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/fox.png',
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Welcome,",
-                        style: GoogleFonts.nunito(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      // Editable Name
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              username,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                              style: GoogleFonts.nunito(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: KeepUpApp.primaryYellow,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: _showEditNameDialog,
-                            child: const Icon(
-                              Icons.edit,
-                              size: 18,
-                              color: Colors.grey,
-                            ),
+      // ✅ ADDED REFRESH INDICATOR HERE
+      body: RefreshIndicator(
+        onRefresh: _fetchUserData, // Pull down triggers this
+        color: KeepUpApp.primaryYellow,
+        backgroundColor: Colors.white,
+        child: SingleChildScrollView(
+          physics:
+              const AlwaysScrollableScrollPhysics(), // Ensures you can scroll even if content is short
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: _showChatModal,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.orange.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMainCard(
-                    context,
-                    title: "Daily Challenge",
-                    subtitle: "3 Questions",
-                    bgColor: KeepUpApp.bgYellow,
-                    textColor: KeepUpApp.textColor,
-                    btnColor: KeepUpApp.primaryYellow,
-                    onTap: isLoadingQuiz ? null : _startQuiz,
-                    isLoading: isLoadingQuiz,
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: _buildMainCard(
-                    context,
-                    title: "Catch me Up",
-                    subtitle: "15 Minutes",
-                    bgColor: KeepUpApp.bgPurple,
-                    textColor: Colors.white,
-                    btnColor: Colors.white.withOpacity(0.2),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CatchUpScreen(),
+                      child: Image.asset(
+                        'assets/fox.png',
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.contain,
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-            _buildFullWidthCard(
-              context,
-              title: "Explore today's top news",
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CategoryScreen()),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Welcome,",
+                          style: GoogleFonts.nunito(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                username,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: GoogleFonts.nunito(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: KeepUpApp.primaryYellow,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: _showEditNameDialog,
+                              child: const Icon(
+                                Icons.edit,
+                                size: 18,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            _buildFullWidthCard(
-              context,
-              title: "Your Bookmarks",
-              onTap: () => Navigator.push(
+              const SizedBox(height: 30),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMainCard(
+                      context,
+                      title: "Daily Challenge",
+                      subtitle: "3 Questions",
+                      bgColor: KeepUpApp.bgYellow,
+                      textColor: KeepUpApp.textColor,
+                      btnColor: KeepUpApp.primaryYellow,
+                      onTap: isLoadingQuiz ? null : _startQuiz,
+                      isLoading: isLoadingQuiz,
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: _buildMainCard(
+                      context,
+                      title: "Catch me Up",
+                      subtitle: "15 Minutes",
+                      bgColor: KeepUpApp.bgPurple,
+                      textColor: Colors.white,
+                      btnColor: Colors.white.withOpacity(0.2),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CatchUpScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 30),
+              _buildFullWidthCard(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const BookmarksScreen(),
+                title: "Explore today's top news",
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CategoryScreen(),
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              _buildFullWidthCard(
+                context,
+                title: "Your Bookmarks",
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const BookmarksScreen(),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(

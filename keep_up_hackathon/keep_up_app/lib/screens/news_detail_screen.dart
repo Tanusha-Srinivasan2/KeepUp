@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import '../models/news_model.dart';
 
@@ -19,8 +20,6 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
-
-  // To show loading state during AI response
   bool _isThinking = false;
 
   @override
@@ -30,7 +29,24 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     super.dispose();
   }
 
-  // 1. OPEN CHAT MODAL (The Fox's Brain)
+  Future<void> _launchSource() async {
+    final String urlStr = widget.newsItem.sourceUrl;
+    final Uri url = Uri.parse(urlStr);
+
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch $url');
+      }
+    } catch (e) {
+      print("Error launching URL: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Could not open link: $urlStr")));
+      }
+    }
+  }
+
   void _showChatModal() {
     showModalBottomSheet(
       context: context,
@@ -40,45 +56,59 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     );
   }
 
-  // 2. THE CHAT SHEET UI
+  // ✅ UPDATED: Nicer Chat Sheet with Bigger Fox
   Widget _buildChatSheet() {
     return StatefulBuilder(
       builder: (context, setModalState) {
         return Container(
-          height: 400,
+          height: 450, // Slightly taller for better spacing
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
           child: Column(
             children: [
-              // Header
+              // ✅ Nicer Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Image.asset('assets/fox.png', width: 40, height: 40),
-                      const SizedBox(width: 10),
-                      Text(
-                        "Ask me about this!",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      // Bigger Fox in Modal
+                      Image.asset('assets/fox.png', width: 70, height: 70),
+                      const SizedBox(width: 15),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Hey there!",
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            "Ask me anything!",
+                            style: GoogleFonts.poppins(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF2D2D2D),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: Colors.grey),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
               const Divider(),
-
-              // Response Area
               Expanded(
                 child: Center(
                   child: _isThinking
@@ -88,43 +118,45 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                             const CircularProgressIndicator(
                               color: Colors.orange,
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 15),
                             Text(
                               "Thinking...",
-                              style: GoogleFonts.poppins(color: Colors.grey),
+                              style: GoogleFonts.poppins(
+                                color: Colors.grey,
+                                fontSize: 16,
+                              ),
                             ),
                           ],
                         )
-                      : Text(
-                          "Tap the mic to ask a question about this news article.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: Text(
+                            "Tap the mic below to ask a question about this article.",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              color: Colors.black54,
+                              height: 1.4,
+                            ),
                           ),
                         ),
                 ),
               ),
-
-              // Mic Button inside Modal
               GestureDetector(
                 onTapDown: (_) async {
-                  // START LISTENING
                   bool available = await _speech.initialize();
                   if (available) {
                     setModalState(() => _isListening = true);
                     _speech.listen(
                       onResult: (val) async {
                         if (val.hasConfidenceRating && val.confidence > 0) {
-                          // When speech is done, send to AI
                           if (val.finalResult) {
                             setModalState(() {
                               _isListening = false;
                               _isThinking = true;
                             });
                             await _askAI(val.recognizedWords, context);
-                            // Close modal after answering (optional, or keep open to read text)
-                            Navigator.pop(context);
+                            if (mounted) Navigator.pop(context);
                           }
                         }
                       },
@@ -135,20 +167,35 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   setModalState(() => _isListening = false);
                   _speech.stop();
                 },
-                child: CircleAvatar(
-                  radius: 35,
-                  backgroundColor: _isListening ? Colors.red : Colors.orange,
+                child: Container(
+                  height: 70,
+                  width: 70,
+                  decoration: BoxDecoration(
+                    color: _isListening ? Colors.redAccent : Colors.orange,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_isListening ? Colors.redAccent : Colors.orange)
+                            .withOpacity(0.4),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
                   child: Icon(
                     _isListening ? Icons.mic : Icons.mic_none,
                     color: Colors.white,
-                    size: 30,
+                    size: 35,
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
               Text(
                 _isListening ? "Listening..." : "Hold to Speak",
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
               ),
             ],
           ),
@@ -157,14 +204,10 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     );
   }
 
-  // 3. SEND QUESTION TO BACKEND (Context Aware)
   Future<void> _askAI(String question, BuildContext modalContext) async {
-    // Construct context from the current article
     String contextString =
         "Title: ${widget.newsItem.title}. Content: ${widget.newsItem.description}";
 
-    // Use your existing Chat Endpoint, passing the article context manually if needed
-    // Or just ask the general chat endpoint if it's smart enough
     final url = Uri.parse(
       'http://10.0.2.2:8080/api/news/chat?question=$question',
     );
@@ -173,7 +216,6 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         String answer = response.body;
-        // Speak the answer
         await flutterTts.speak(answer);
       }
     } catch (e) {
@@ -185,19 +227,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5), // Cream Background
-      // ✅ FOX FLOATING ACTION BUTTON
-      floatingActionButton: SizedBox(
-        width: 70,
-        height: 70,
-        child: FloatingActionButton(
-          onPressed: _showChatModal,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: Image.asset('assets/fox.png', fit: BoxFit.contain),
-        ),
-      ),
-
+      backgroundColor: const Color(0xFFFFF9E5),
       body: CustomScrollView(
         slivers: [
           // 1. Image Header
@@ -255,7 +285,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Topic & Date
+                  // ✅ UPDATED ROW: Topic + Time + BIGGER FOX (No Circle)
                   Row(
                     children: [
                       Container(
@@ -290,9 +320,20 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                           fontSize: 14,
                         ),
                       ),
+                      const Spacer(), // Pushes the Fox to the right
+                      // 🦊 BIGGER FOX BUTTON (No Background Circle)
+                      GestureDetector(
+                        onTap: _showChatModal,
+                        child: Image.asset(
+                          'assets/fox.png',
+                          width: 65, // Increased size
+                          height: 65,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
 
                   // Headline
                   Text(
@@ -315,7 +356,42 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                       height: 1.8,
                     ),
                   ),
-                  const SizedBox(height: 80), // Space for FAB
+
+                  const SizedBox(height: 30),
+
+                  // Dive Deeper Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: _launchSource,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E1E1E),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 5,
+                        shadowColor: Colors.orange.withOpacity(0.3),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Dive Deeper",
+                            style: GoogleFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Icon(Icons.open_in_new, color: Colors.white),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

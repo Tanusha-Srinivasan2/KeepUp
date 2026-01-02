@@ -3,9 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-
-import '../models/user_model.dart';
-import '../main.dart'; // To access KeepUpApp.primaryYellow, bgPurple, etc.
+import '../main.dart'; // For KeepUpApp colors
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -15,42 +13,34 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
-  List<UserStats> users = [];
+  List<dynamic> leaderboardData = [];
   bool isLoading = true;
-  String myUserId = "";
+  String? currentUserId;
 
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _fetchLeaderboard();
   }
 
-  Future<void> _initializeApp() async {
+  Future<void> _fetchLeaderboard() async {
     final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        myUserId = prefs.getString('user_id') ?? "";
-      });
-    }
-    await fetchLeaderboard();
-  }
+    currentUserId = prefs.getString('user_id');
 
-  Future<void> fetchLeaderboard() async {
     try {
       final url = Uri.parse('http://10.0.2.2:8080/api/news/leaderboard');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
         if (mounted) {
           setState(() {
-            users = data.map((e) => UserStats.fromJson(e)).toList();
+            leaderboardData = json.decode(response.body);
             isLoading = false;
           });
         }
       }
     } catch (e) {
-      debugPrint("Error fetching leaderboard: $e");
+      print("Error fetching leaderboard: $e");
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -58,100 +48,198 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Light Yellow background from your theme
-      backgroundColor: const Color(0xFFFEFCE0),
+      backgroundColor: const Color(0xFFFEFCE0), // Cream background
       appBar: AppBar(
-        title: Text(
-          "Global Rankings",
-          style: GoogleFonts.nunito(
-            fontWeight: FontWeight.bold,
-            color: KeepUpApp.bgPurple,
-          ),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: KeepUpApp.bgPurple),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2D2D2D)),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "Leader Board",
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF2D2D2D),
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+        centerTitle: true,
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: KeepUpApp.bgPurple),
-            )
-          : users.isEmpty
-          ? Center(
-              child: Text("No rankings found.", style: GoogleFonts.nunito()),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              itemCount: users.length,
-              itemBuilder: (context, index) {
-                final user = users[index];
-                // Correct comparison logic using unique ID
-                final bool isMe = user.id == myUserId;
+      body: Column(
+        children: [
+          _buildLeagueHeader(),
 
-                return Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    // Highlight: Solid Yellow for YOU, White for OTHERS
-                    color: isMe ? KeepUpApp.primaryYellow : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: isMe
-                        ? Border.all(color: KeepUpApp.bgPurple, width: 2)
-                        : null,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+          const SizedBox(height: 15),
+
+          // LIST SECTION
+          Expanded(
+            child: isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Colors.orange),
+                  )
+                : Container(
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      // ✅ UPDATED: Matches Cream Background
+                      color: Color(0xFFFEFCE0),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(40),
                       ),
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
                     ),
-                    leading: CircleAvatar(
-                      backgroundColor: _getRankColor(index),
-                      child: Text(
-                        "${index + 1}",
-                        style: GoogleFonts.nunito(
-                          fontWeight: FontWeight.bold,
-                          color: index < 3 ? Colors.white : KeepUpApp.bgPurple,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(40),
+                      ),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 24,
                         ),
-                      ),
-                    ),
-                    title: Text(
-                      isMe ? "${user.name} (You)" : user.name,
-                      style: GoogleFonts.nunito(
-                        fontWeight: isMe ? FontWeight.bold : FontWeight.w600,
-                        fontSize: 18,
-                        color: KeepUpApp.bgPurple,
-                      ),
-                    ),
-                    trailing: Text(
-                      "${user.xp} XP",
-                      style: GoogleFonts.nunito(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: isMe
-                            ? KeepUpApp.bgPurple
-                            : const Color(0xFF00E676),
+                        itemCount: leaderboardData.length,
+                        // ✅ UPDATED: Divider between every user
+                        separatorBuilder: (context, index) => Divider(
+                          color: Colors.grey.withOpacity(0.3),
+                          thickness: 1,
+                          height: 24, // Adds spacing around the line
+                        ),
+                        itemBuilder: (context, index) {
+                          final user = leaderboardData[index];
+                          return _buildUserRow(user, index + 1);
+                        },
                       ),
                     ),
                   ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Color _getRankColor(int index) {
-    if (index == 0) return const Color(0xFFFFD700); // Gold
-    if (index == 1) return const Color(0xFFC0C0C0); // Silver
-    if (index == 2) return const Color(0xFFCD7F32); // Bronze
-    return Colors.transparent;
+  Widget _buildLeagueHeader() {
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Opacity(
+              opacity: 0.6,
+              child: Image.asset('assets/diamond1.png', width: 35),
+            ),
+            const SizedBox(width: 15),
+            Transform.translate(
+              offset: const Offset(0, -8),
+              child: Image.asset('assets/diamond2.png', width: 80),
+            ),
+            const SizedBox(width: 15),
+            Opacity(
+              opacity: 0.6,
+              child: Image.asset('assets/diamond3.png', width: 35),
+            ),
+          ],
+        ),
+        const SizedBox(height: 15),
+        Text(
+          "Ruby League",
+          style: GoogleFonts.poppins(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2D2D2D),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Next Tournament in 5 hrs",
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            color: Colors.grey[500],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserRow(Map<String, dynamic> user, int rank) {
+    bool isMe = user['userId'] == currentUserId;
+    String name = isMe ? "You" : (user['name'] ?? "Unknown");
+    int xp = user['xp'] ?? 0;
+
+    // AESTHETIC HIGHLIGHT
+    // ✅ "You" gets a slightly darker cream/yellow tint to stand out subtly
+    Color bgColor = isMe ? const Color(0xFFFFF9C4) : Colors.transparent;
+    Color nameColor = isMe ? Colors.orange[800]! : const Color(0xFF2D2D2D);
+    FontWeight fontWeight = isMe ? FontWeight.bold : FontWeight.w600;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Row(
+        children: [
+          // 1. RANK
+          SizedBox(width: 40, child: Center(child: _buildRankDisplay(rank))),
+
+          const SizedBox(width: 15),
+
+          // 2. NAME
+          Expanded(
+            child: Text(
+              name,
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: fontWeight,
+                color: nameColor,
+              ),
+            ),
+          ),
+
+          // 3. XP SCORE
+          Text(
+            "$xp XP",
+            style: GoogleFonts.poppins(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: isMe ? Colors.orange[900] : Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRankDisplay(int rank) {
+    if (rank == 1) {
+      return const Icon(
+        Icons.emoji_events_rounded,
+        color: Color(0xFFFFD700),
+        size: 28,
+      ); // Gold
+    } else if (rank == 2) {
+      return const Icon(
+        Icons.emoji_events_rounded,
+        color: Color(0xFFC0C0C0),
+        size: 28,
+      ); // Silver
+    } else if (rank == 3) {
+      return const Icon(
+        Icons.emoji_events_rounded,
+        color: Color(0xFFCD7F32),
+        size: 28,
+      ); // Bronze
+    } else {
+      return Text(
+        rank.toString(),
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: const Color(0xFF2D2D2D),
+        ),
+      );
+    }
   }
 }

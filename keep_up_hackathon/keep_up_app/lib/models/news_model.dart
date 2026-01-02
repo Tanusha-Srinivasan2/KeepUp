@@ -6,9 +6,8 @@ class NewsCard {
   final String time;
   final String topic;
   final List<String> keywords;
-
-  // ✅ NEW FIELD: To store the date stamp (e.g. "2026-01-01")
   final String publishedDate;
+  final String sourceUrl; // ✅ NEW FIELD
 
   NewsCard({
     required this.id,
@@ -18,25 +17,25 @@ class NewsCard {
     required this.time,
     required this.topic,
     required this.keywords,
-    this.publishedDate = '', // Default empty if missing
+    this.publishedDate = '',
+    this.sourceUrl = '', // Default empty
   });
 
   factory NewsCard.fromJson(Map<String, dynamic> json) {
     return NewsCard(
       id: json['id'] ?? '',
       title: json['title'] ?? 'News Update',
-      // Fallback for description logic
-      description:
-          json['description'] ?? json['contentLine'] ?? 'No details available.',
-      imageUrl:
-          json['imageUrl'] ??
-          'https://images.unsplash.com/photo-1504711434969-e33886168f5c',
+      description: json['description'] ?? 'No details available.',
+      imageUrl: json['imageUrl'] ?? 'https://via.placeholder.com/400',
       time: json['time'] ?? 'Just now',
       topic: json['topic'] ?? 'General',
       keywords: List<String>.from(json['keywords'] ?? []),
-
-      // ✅ PARSE DATE
       publishedDate: json['publishedDate'] ?? '',
+
+      // ✅ Parse URL or fallback to Google Search
+      sourceUrl:
+          json['sourceUrl'] ??
+          'https://google.com/search?q=${Uri.encodeComponent(json['title'] ?? "")}',
     );
   }
 }
