@@ -59,7 +59,7 @@ class _QuizScreenState extends State<QuizScreen> {
         widget.questions[currentIndex],
       );
     } else {
-      // 3. Next Question (Handled by closing the sheet)
+      // 3. Next Question
       _nextQuestion();
     }
   }
@@ -77,12 +77,11 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // Result Sheet with Topic Image & Short Layout
+  // Result Sheet
   void _showResultBottomSheet(bool isCorrect, QuizQuestion question) {
     setState(() => showExplanation = true);
     _speak(question.explanation); // Auto-speak
 
-    // Map topics to images
     Map<String, String> topicImages = {
       "Technology":
           "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400",
@@ -109,11 +108,11 @@ class _QuizScreenState extends State<QuizScreen> {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           decoration: const BoxDecoration(
-            color: Color(0xFFFFF9E5), // Cream
+            color: Color(0xFFFFF9E5),
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Takes minimal height
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 isCorrect ? "Correct!" : "Did You Know?",
@@ -124,8 +123,6 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               const SizedBox(height: 15),
-
-              // Topic Image
               ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Image.network(
@@ -133,13 +130,11 @@ class _QuizScreenState extends State<QuizScreen> {
                   height: 150,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
+                  errorBuilder: (c, e, s) =>
                       Image.asset('assets/fox.png', height: 150),
                 ),
               ),
               const SizedBox(height: 15),
-
-              // Explanation
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -157,15 +152,13 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Continue Button
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
                     flutterTts.stop();
-                    Navigator.pop(context); // Close sheet
+                    Navigator.pop(context);
                     _nextQuestion();
                   },
                   style: ElevatedButton.styleFrom(
@@ -193,7 +186,7 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  // ✅ UPDATED: Navigates to Result Screen
+  // ✅ UPDATED: SAVES DATE TO PREVENT RETRY
   Future<void> _finishQuiz() async {
     setState(() => isSubmitting = true);
 
@@ -201,11 +194,17 @@ class _QuizScreenState extends State<QuizScreen> {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
 
-    // 1. Send XP to Backend
+    // 1. Save Today's Date
+    String today = DateTime.now().toString().split(' ')[0];
+    await prefs.setString('last_quiz_date', today);
+
+    // 2. Send XP to Backend
     if (userId != null && earnedXp > 0) {
       try {
-        final url = Uri.parse(
-          'http://10.0.2.2:8080/api/news/user/xp?userId=$userId&points=$earnedXp',
+        final url = Uri.https(
+          'amalia-trancelike-beulah.ngrok-free.dev',
+          '/api/news/user/xp',
+          {'userId': userId, 'points': earnedXp.toString()},
         );
         await http.post(url);
       } catch (e) {
@@ -214,7 +213,6 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     if (mounted) {
-      // 2. Navigate to Result Screen (Replace QuizScreen so back button goes home)
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -223,7 +221,7 @@ class _QuizScreenState extends State<QuizScreen> {
             totalQuestions: widget.questions.length,
             xpEarned: earnedXp,
             onContinue: () {
-              Navigator.pop(context); // Closes ResultScreen -> Back to Home
+              Navigator.pop(context);
             },
           ),
         ),
@@ -247,7 +245,6 @@ class _QuizScreenState extends State<QuizScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFEFCE0),
-      // Fox Helper
       floatingActionButton: GestureDetector(
         onTap: () => _speak(question.question),
         child: Container(
@@ -255,13 +252,11 @@ class _QuizScreenState extends State<QuizScreen> {
           child: Image.asset('assets/fox.png', height: 80),
         ),
       ),
-
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
-              // Header & Progress
               Row(
                 children: [
                   IconButton(
@@ -282,8 +277,6 @@ class _QuizScreenState extends State<QuizScreen> {
                 ],
               ),
               const SizedBox(height: 30),
-
-              // Question Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -315,8 +308,6 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // Options List
               Expanded(
                 child: ListView.separated(
                   itemCount: question.options.length,
@@ -324,7 +315,6 @@ class _QuizScreenState extends State<QuizScreen> {
                   itemBuilder: (context, index) {
                     bool isSelected = selectedIndex == index;
                     bool isCorrect = index == question.correctIndex;
-
                     Color bgColor = Colors.transparent;
                     Color borderColor = const Color(0xFFFFE082);
 
@@ -369,8 +359,6 @@ class _QuizScreenState extends State<QuizScreen> {
                   },
                 ),
               ),
-
-              // Main Button
               SizedBox(
                 width: double.infinity,
                 height: 56,

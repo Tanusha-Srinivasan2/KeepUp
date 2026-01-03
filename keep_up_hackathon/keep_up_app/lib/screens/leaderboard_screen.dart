@@ -28,7 +28,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     currentUserId = prefs.getString('user_id');
 
     try {
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/leaderboard');
+      final url = Uri.parse(
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/leaderboard',
+      );
       final response = await http.get(url);
 
       if (response.statusCode == 200) {

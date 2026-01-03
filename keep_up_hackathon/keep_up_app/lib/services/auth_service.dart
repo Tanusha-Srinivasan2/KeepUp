@@ -33,10 +33,10 @@ class AuthService {
     await prefs.setString(_keyUserName, newName);
 
     // 4. Send to Backend
-    // NOTE: using 10.0.2.2 for emulator
+
     try {
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/create?userId=$newId&name=$newName',
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/create?userId=$newId&name=$newName',
       );
       final response = await http.post(url);
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home_screen.dart';
+import 'landing_page.dart'; // ✅ Imported LandingPage
+import 'leaderboard_screen.dart'; // ✅ Imported LeaderboardScreen
 
 class CategoryScreen extends StatelessWidget {
   const CategoryScreen({super.key});
@@ -43,8 +45,9 @@ class CategoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5), // Light Cream Background
-      // ✅ AESTHETIC NAV BAR (Visual Only)
-      bottomNavigationBar: _buildBottomNavBar(),
+      // ✅ AESTHETIC NAV BAR (Now Functional)
+      // We pass 'context' here so we can perform navigation
+      bottomNavigationBar: _buildBottomNavBar(context),
 
       body: SafeArea(
         child: Column(
@@ -180,8 +183,9 @@ class CategoryScreen extends StatelessWidget {
     );
   }
 
-  // ✅ UPDATED NAV BAR
-  Widget _buildBottomNavBar() {
+  // ✅ UPDATED NAV BAR FUNCTION
+  // Accepts BuildContext to allow navigation
+  Widget _buildBottomNavBar(BuildContext context) {
     return Container(
       height: 90,
       decoration: const BoxDecoration(
@@ -191,44 +195,88 @@ class CategoryScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _navItem(Icons.home_outlined, "Home", false),
-          _navItem(Icons.explore, "Explore", true), // Highlighted
-          _navItem(Icons.leaderboard_outlined, "Rank", false),
+          // Home Icon -> Navigates to LandingPage
+          _navItem(
+            Icons.home_outlined,
+            "Home",
+            false,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LandingPage()),
+              );
+            },
+          ),
+
+          // Explore Icon -> Already here (Active state)
+          _navItem(
+            Icons.explore,
+            "Explore",
+            true,
+            onTap: () {
+              // Do nothing, we are already here
+            },
+          ),
+
+          // Rank Icon -> Navigates to LeaderboardScreen
+          _navItem(
+            Icons.leaderboard_outlined,
+            "Rank",
+            false,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LeaderboardScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _navItem(IconData icon, String label, bool isSelected) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: isSelected
-              ? BoxDecoration(
-                  color: const Color(0xFF2D2D2D), // Dark Pill
-                  borderRadius: BorderRadius.circular(20),
-                )
-              : null,
-          child: Icon(
-            icon,
-            color: isSelected ? Colors.white : Colors.grey,
-            size: 26,
-          ),
-        ),
-        if (!isSelected) ...[
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
+  // ✅ UPDATED NAV ITEM HELPER
+  // Now accepts an 'onTap' callback
+  Widget _navItem(
+    IconData icon,
+    String label,
+    bool isSelected, {
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap, // Handle the tap here
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: isSelected
+                ? BoxDecoration(
+                    color: const Color(0xFF2D2D2D), // Dark Pill
+                    borderRadius: BorderRadius.circular(20),
+                  )
+                : null,
+            child: Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey,
+              size: 26,
             ),
           ),
+          if (!isSelected) ...[
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

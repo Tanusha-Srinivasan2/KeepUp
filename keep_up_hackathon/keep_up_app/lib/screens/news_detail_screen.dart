@@ -209,7 +209,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         "Title: ${widget.newsItem.title}. Content: ${widget.newsItem.description}";
 
     final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/chat?question=$question',
+      'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/chat?question=$question',
     );
 
     try {

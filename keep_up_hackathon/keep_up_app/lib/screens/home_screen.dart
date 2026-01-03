@@ -11,7 +11,10 @@ import 'package:intl/intl.dart';
 
 import '../models/news_model.dart';
 import 'news_detail_screen.dart';
-import 'ai_response_screen.dart'; // ✅ Ensure this file exists
+import 'ai_response_screen.dart';
+import 'landing_page.dart'; // ✅ Imports LandingPage
+import 'category_screen.dart'; // ✅ Imports CategoryScreen
+import 'leaderboard_screen.dart'; // ✅ Imports LeaderboardScreen
 
 class HomeScreen extends StatefulWidget {
   final String? categoryFilter;
@@ -106,7 +109,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> fetchNews(String category) async {
     setState(() => isLoading = true);
-    String baseUrl = 'http://10.0.2.2:8080/api/news/feed';
+    // ✅ Updated to use HTTPS
+    String baseUrl =
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/feed';
 
     if (_selectedDate != null) {
       String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
@@ -151,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ CHAT SHEET (Tap to Toggle)
   Widget _buildChatSheet() {
     return StatefulBuilder(
       builder: (context, setModalState) {
@@ -213,7 +217,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                 ),
               ),
-
               GestureDetector(
                 onTap: () async {
                   if (_isListening) {
@@ -221,12 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _speech.stop();
                     return;
                   }
-
-                  bool available = await _speech.initialize(
-                    onError: (e) => print("Mic Error: $e"),
-                    onStatus: (s) => print("Mic Status: $s"),
-                  );
-
+                  bool available = await _speech.initialize();
                   if (available) {
                     setModalState(() => _isListening = true);
                     _speech.listen(
@@ -236,14 +234,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             _isListening = false;
                             _isThinking = true;
                           });
-
-                          // We pass the navigation responsibility to _askAI
                           await _askAI(val.recognizedWords);
                         }
                       },
                     );
-                  } else {
-                    print("Mic denied or unavailable");
                   }
                 },
                 child: CircleAvatar(
@@ -256,12 +250,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
-              const SizedBox(height: 10),
-              Text(
-                _isListening ? "Listening... (Tap to stop)" : "Tap to Speak",
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-              ),
             ],
           ),
         );
@@ -269,27 +257,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ✅ CRITICAL FIX: Closes modal THEN opens screen
   Future<void> _askAI(String question) async {
-    print("🦊 DEBUG: Asking AI -> $question");
-
     String contextInfo =
         "Context: Browsing ${_categories[_selectedCategoryIndex]} news.";
-    final url = Uri.http('10.0.2.2:8080', '/api/news/chat', {
-      'question': "$contextInfo Question: $question",
-    });
+    final url = Uri.https(
+      'amalia-trancelike-beulah.ngrok-free.dev',
+      '/api/news/chat',
+      {'question': "$contextInfo Question: $question"},
+    );
 
     try {
       final response = await http.get(url);
-      print("🦊 DEBUG: Response Code: ${response.statusCode}");
-
       if (response.statusCode == 200) {
         if (!mounted) return;
-
-        // 1. Close the "Thinking..." Modal
         Navigator.pop(context);
-
-        // 2. Open the Yellow Answer Screen
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -297,13 +278,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       } else {
-        print("🦊 DEBUG: Server Error ${response.body}");
-        // We can safely speak here because the user is still looking at the error UI
         await flutterTts.speak("Sorry, the server is having trouble.");
         if (mounted) Navigator.pop(context);
       }
     } catch (e) {
-      print("🦊 DEBUG: Connection Failed -> $e");
       await flutterTts.speak("I can't reach the server right now.");
       if (mounted) Navigator.pop(context);
     }
@@ -315,7 +293,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String? userId = prefs.getString('user_id');
     if (userId == null) return;
     final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/user/$userId/bookmark',
+      'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId/bookmark',
     );
     try {
       await http.post(
@@ -355,6 +333,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
+      // ✅ UPDATED NAV BAR
       bottomNavigationBar: _buildBottomNavBar(),
 
       body: SafeArea(
@@ -389,6 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ✅ NAV BAR FUNCTION
   Widget _buildBottomNavBar() {
     return Container(
       height: 90,
@@ -399,44 +379,91 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _navItem(Icons.home_outlined, "Home", false),
-          _navItem(Icons.explore, "Explore", true),
-          _navItem(Icons.leaderboard_outlined, "Rank", false),
+          // Home Icon -> Navigates to LandingPage (Not selected)
+          _navItem(
+            Icons.home_outlined,
+            "Home",
+            false,
+            onTap: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LandingPage()),
+                (route) => false,
+              );
+            },
+          ),
+
+          // Explore Icon -> Selected (We are "in" explore)
+          // Tapping it takes you back to Category List
+          _navItem(
+            Icons.explore,
+            "Explore",
+            true,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CategoryScreen()),
+              );
+            },
+          ),
+
+          // Rank Icon -> Navigates to Leaderboard
+          _navItem(
+            Icons.leaderboard_outlined,
+            "Rank",
+            false,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const LeaderboardScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _navItem(IconData icon, String label, bool isSelected) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: isSelected
-              ? BoxDecoration(
-                  color: const Color(0xFF2D2D2D),
-                  borderRadius: BorderRadius.circular(20),
-                )
-              : null,
-          child: Icon(
-            icon,
-            color: isSelected ? Colors.white : Colors.grey,
-            size: 26,
-          ),
-        ),
-        if (!isSelected) ...[
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.poppins(
-              fontSize: 11,
-              color: Colors.grey,
-              fontWeight: FontWeight.w500,
+  Widget _navItem(
+    IconData icon,
+    String label,
+    bool isSelected, {
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: isSelected
+                ? BoxDecoration(
+                    color: const Color(0xFF2D2D2D), // Dark Pill for Explore
+                    borderRadius: BorderRadius.circular(20),
+                  )
+                : null,
+            child: Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey,
+              size: 26,
             ),
           ),
+          if (!isSelected) ...[
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 

@@ -30,7 +30,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
 
     try {
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/$userId/bookmarks',
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId/bookmarks',
       );
       final response = await http.get(url);
 
@@ -57,7 +57,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     });
 
     final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/user/$userId/bookmark/$newsId',
+      'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId/bookmark/$newsId',
     );
     await http.delete(url);
   }

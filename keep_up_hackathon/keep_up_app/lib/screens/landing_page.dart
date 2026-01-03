@@ -16,7 +16,7 @@ import 'quiz_screen.dart';
 import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
 import 'auth_screen.dart';
-import 'ai_response_screen.dart'; // ✅ IMPORT ADDED
+import 'ai_response_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -33,8 +33,6 @@ class _LandingPageState extends State<LandingPage> {
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
-  // We keep these for the "Listening" part, but the "Speaking" part
-  // is now handled by the AiResponseScreen.
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -84,7 +82,9 @@ class _LandingPageState extends State<LandingPage> {
     setState(() => username = storedName ?? "Reader");
 
     try {
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/user/$userId');
+      final url = Uri.parse(
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId',
+      );
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -156,7 +156,7 @@ class _LandingPageState extends State<LandingPage> {
 
     try {
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/updateName?userId=$userId&newName=$newName',
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/updateName?userId=$userId&newName=$newName',
       );
       await http.post(url);
     } catch (e) {
@@ -267,9 +267,6 @@ class _LandingPageState extends State<LandingPage> {
                             _isThinking = true;
                           });
                           await _askAI(val.recognizedWords);
-                          // We DO NOT pop the context here anymore,
-                          // because we are navigating to a new screen.
-                          // The new screen will cover the modal automatically.
                         }
                       },
                       pauseFor: const Duration(seconds: 10),
@@ -303,18 +300,17 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // ✅ FIXED: Navigate to AiResponseScreen instead of speaking directly
   Future<void> _askAI(String question) async {
-    final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/chat?question=$question',
+    final url = Uri.https(
+      'amalia-trancelike-beulah.ngrok-free.dev',
+      '/api/news/chat',
+      {'question': question},
     );
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
-        // 1. Close the Bottom Sheet (Chat Modal)
         if (mounted) Navigator.pop(context);
 
-        // 2. Open the AI Response Screen (It will speak the text automatically!)
         if (mounted) {
           Navigator.push(
             context,
@@ -326,18 +322,44 @@ class _LandingPageState extends State<LandingPage> {
       }
     } catch (e) {
       print("AI Error: $e");
-      // If error, just speak it here since we aren't changing screens
       await flutterTts.speak("Sorry, I'm having trouble connecting.");
     }
   }
 
+  // ✅ MODIFIED: Added logic to check if quiz was already attempted today
   Future<void> _startQuiz() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Get the date of the last quiz attempt
+    String? lastQuizDate = prefs.getString('last_quiz_date');
+
+    // Get today's date formatted as YYYY-MM-DD
+    String today = DateTime.now().toIso8601String().split('T')[0];
+
+    // If they already did it today, show a message and stop
+    if (lastQuizDate == today) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "You've already completed today's challenge! Come back tomorrow.",
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => isLoadingQuiz = true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Generating Daily Challenge...")),
     );
     try {
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/quiz');
+      final url = Uri.parse(
+        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/quiz',
+      );
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
