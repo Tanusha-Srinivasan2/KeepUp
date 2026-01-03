@@ -3,8 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import '../main.dart'; // For KeepUpApp colors
+import '../main.dart';
 import 'landing_page.dart';
+import 'splash_screen.dart'; // ✅ 1. ADD THIS IMPORT
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -30,12 +31,10 @@ class _AuthScreenState extends State<AuthScreen> {
       }
 
       // 2. Extract Details
-      // We use email as ID because it's unique and permanent
       String userId = googleUser.email;
       String name = googleUser.displayName ?? "Reader";
 
-      // 3. Register User in Backend (Firestore)
-      // This ensures they appear on the Leaderboard immediately
+      // 3. Register User in Backend
       final url = Uri.parse(
         'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
       );
@@ -46,11 +45,13 @@ class _AuthScreenState extends State<AuthScreen> {
       await prefs.setString('user_id', userId);
       await prefs.setString('user_name', name);
 
-      // 5. Navigate to Home
+      // 5. Navigate to CELEBRATION (Splash) instead of Home
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const LandingPage()),
+          // ✅ 2. CHANGE THIS LINE:
+          // Was: MaterialPageRoute(builder: (context) => const LandingPage()),
+          MaterialPageRoute(builder: (context) => const SplashScreen()),
         );
       }
     } catch (error) {
@@ -65,8 +66,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (The rest of your build method stays exactly the same) ...
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9E5), // Cream Background
+      backgroundColor: const Color(0xFFFFF9E5),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 30.0),
@@ -74,8 +76,6 @@ class _AuthScreenState extends State<AuthScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
-
-              // FOX LOGO
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -90,8 +90,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Image.asset('assets/fox.png', width: 150),
               ),
               const SizedBox(height: 40),
-
-              // APP TITLE
               Text(
                 "Keep Up",
                 style: GoogleFonts.poppins(
@@ -109,10 +107,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   color: Colors.grey[600],
                 ),
               ),
-
               const Spacer(),
-
-              // GOOGLE LOGIN BUTTON
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -131,12 +126,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // You can add a google icon asset here if you have one
-                            // Image.asset('assets/google_icon.png', width: 24),
-                            const Icon(
-                              Icons.login,
-                              color: Colors.orange,
-                            ), // Placeholder icon
+                            const Icon(Icons.login, color: Colors.orange),
                             const SizedBox(width: 10),
                             Text(
                               "Continue with Google",

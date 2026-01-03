@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'landing_page.dart';
-import '../services/auth_service.dart';
+// import '../services/auth_service.dart'; // ❌ REMOVE THIS
+import 'landing_page.dart'; // ✅ Change this to your Home/Landing Page
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,10 +17,9 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // 1. Start Auth immediately
-    AuthService.loginOrRegister();
+    // ❌ REMOVE AuthService.loginOrRegister();
+    // We are already logged in when we get here!
 
-    // 2. Wait for the first frame to be drawn before caching and animating
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_initialized) {
         _precacheAndStart();
@@ -30,7 +29,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _precacheAndStart() {
-    // PRE-CACHE images so they don't pop in/out
     precacheImage(const AssetImage('assets/splash_pattern.png'), context);
     precacheImage(const AssetImage('assets/jumpfox.png'), context);
     precacheImage(const AssetImage('assets/foxlogo.png'), context);
@@ -39,21 +37,22 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _startAnimationSequence() async {
-    // STAGE 0: Show Logo on Pattern
-    await Future.delayed(const Duration(seconds: 2));
+    // STAGE 0: Show Logo
+    await Future.delayed(const Duration(seconds: 1)); // Shorter wait
 
-    // STAGE 1: Transition Background to Yellow & Show Jumping Fox
+    // STAGE 1: Transition Background & Fox
     if (mounted) setState(() => _stage = 1);
     await Future.delayed(const Duration(milliseconds: 1500));
 
-    // STAGE 2: Fox moves up and "Promoted" text appears
+    // STAGE 2: "Promoted" Text
     if (mounted) setState(() => _stage = 2);
-    await Future.delayed(const Duration(milliseconds: 2500));
+    await Future.delayed(const Duration(milliseconds: 3000));
 
-    // FINISH: Transition to LandingPage
+    // FINISH: Go to the Main App!
     if (mounted) {
       Navigator.pushReplacement(
         context,
+        // ✅ Navigate to HomeScreen (or LandingPage)
         MaterialPageRoute(builder: (context) => const LandingPage()),
       );
     }
@@ -61,10 +60,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (Keep your existing build/UI code exactly the same) ...
+    // It was perfect!
     return Scaffold(
       body: Stack(
         children: [
-          // LAYER 1: SOLID GOLD BACKGROUND (Stages 1 & 2)
+          // LAYER 1: SOLID GOLD BACKGROUND
           AnimatedOpacity(
             duration: const Duration(milliseconds: 800),
             opacity: _stage >= 1 ? 1.0 : 0.0,
@@ -81,7 +82,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
 
-          // LAYER 2: PATTERN BACKGROUND (Stage 0 only)
+          // LAYER 2: PATTERN BACKGROUND
           AnimatedOpacity(
             duration: const Duration(milliseconds: 500),
             opacity: _stage == 0 ? 1.0 : 0.0,
@@ -102,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // VIEW 1: APP LOGO (Only Stage 0)
+                // VIEW 1: APP LOGO
                 AnimatedOpacity(
                   opacity: _stage == 0 ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 500),
@@ -137,7 +138,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   ),
                 ),
 
-                // VIEW 2: THE JUMPING FOX (Stage 1 & 2)
+                // VIEW 2: THE JUMPING FOX
                 if (_stage >= 1)
                   AnimatedSlide(
                     offset: _stage == 2
@@ -153,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     ),
                   ),
 
-                // VIEW 3: PROMOTED TEXT (Only Stage 2)
+                // VIEW 3: PROMOTED TEXT
                 Positioned(
                   bottom: 150,
                   child: AnimatedOpacity(
@@ -170,7 +171,7 @@ class _SplashScreenState extends State<SplashScreen> {
                           ),
                         ),
                         Text(
-                          "Diamond League!",
+                          "Bronze League!",
                           style: GoogleFonts.nunito(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,

@@ -16,6 +16,7 @@ import 'quiz_screen.dart';
 import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
 import 'auth_screen.dart';
+import 'ai_response_screen.dart'; // ✅ IMPORT ADDED
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -32,6 +33,8 @@ class _LandingPageState extends State<LandingPage> {
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
+  // We keep these for the "Listening" part, but the "Speaking" part
+  // is now handled by the AiResponseScreen.
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -222,7 +225,7 @@ class _LandingPageState extends State<LandingPage> {
                           ],
                         )
                       : Text(
-                          "Tap the mic to ask about the latest news, stats, or general questions.",
+                          "Tap the mic to start speaking.\nTap again to stop.",
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
                             fontSize: 16,
@@ -231,36 +234,58 @@ class _LandingPageState extends State<LandingPage> {
                         ),
                 ),
               ),
+
               GestureDetector(
-                onTapDown: (_) async {
-                  bool available = await _speech.initialize();
+                onTap: () async {
+                  if (_isListening) {
+                    setModalState(() => _isListening = false);
+                    _speech.stop();
+                    return;
+                  }
+
+                  bool available = await _speech.initialize(
+                    onStatus: (status) {
+                      print('🎤 Status: $status');
+                      if (status == 'done' || status == 'notListening') {
+                        setModalState(() => _isListening = false);
+                      }
+                    },
+                    onError: (errorNotification) {
+                      print('❌ Mic Error: $errorNotification');
+                      setModalState(() => _isListening = false);
+                    },
+                  );
+
                   if (available) {
                     setModalState(() => _isListening = true);
+
                     _speech.listen(
                       onResult: (val) async {
-                        if (val.hasConfidenceRating && val.confidence > 0) {
-                          if (val.finalResult) {
-                            setModalState(() {
-                              _isListening = false;
-                              _isThinking = true;
-                            });
-                            await _askAI(val.recognizedWords);
-                            if (mounted) Navigator.pop(context);
-                          }
+                        if (val.finalResult) {
+                          setModalState(() {
+                            _isListening = false;
+                            _isThinking = true;
+                          });
+                          await _askAI(val.recognizedWords);
+                          // We DO NOT pop the context here anymore,
+                          // because we are navigating to a new screen.
+                          // The new screen will cover the modal automatically.
                         }
                       },
+                      pauseFor: const Duration(seconds: 10),
+                      listenFor: const Duration(seconds: 30),
+                      cancelOnError: false,
+                      partialResults: true,
                     );
                   }
                 },
-                onTapUp: (_) {
-                  setModalState(() => _isListening = false);
-                  _speech.stop();
-                },
                 child: CircleAvatar(
                   radius: 35,
-                  backgroundColor: _isListening ? Colors.red : Colors.orange,
+                  backgroundColor: _isListening
+                      ? Colors.redAccent
+                      : Colors.orange,
                   child: Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
+                    _isListening ? Icons.stop : Icons.mic,
                     color: Colors.white,
                     size: 30,
                   ),
@@ -268,7 +293,7 @@ class _LandingPageState extends State<LandingPage> {
               ),
               const SizedBox(height: 10),
               Text(
-                _isListening ? "Listening..." : "Hold to Speak",
+                _isListening ? "Listening..." : "Tap to Speak",
                 style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
               ),
             ],
@@ -278,15 +303,30 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
+  // ✅ FIXED: Navigate to AiResponseScreen instead of speaking directly
   Future<void> _askAI(String question) async {
     final url = Uri.parse(
       'http://10.0.2.2:8080/api/news/chat?question=$question',
     );
     try {
       final response = await http.get(url);
-      if (response.statusCode == 200) await flutterTts.speak(response.body);
+      if (response.statusCode == 200) {
+        // 1. Close the Bottom Sheet (Chat Modal)
+        if (mounted) Navigator.pop(context);
+
+        // 2. Open the AI Response Screen (It will speak the text automatically!)
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AiResponseScreen(text: response.body),
+            ),
+          );
+        }
+      }
     } catch (e) {
       print("AI Error: $e");
+      // If error, just speak it here since we aren't changing screens
       await flutterTts.speak("Sorry, I'm having trouble connecting.");
     }
   }
@@ -512,13 +552,11 @@ class _LandingPageState extends State<LandingPage> {
           ),
         ),
       ),
-      // ✅ NAV BAR WITH NO SHADOW
       bottomNavigationBar: Container(
         height: 90,
         decoration: const BoxDecoration(
-          color: Color(0xFFFFF9E5), // Matches Scaffold Background
+          color: Color(0xFFFFF9E5),
           borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
-          // NO SHADOW HERE
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,

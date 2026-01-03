@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart'; // ✅ Import Firebase
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Screens
-import 'screens/landing_page.dart';
+import 'screens/splash_screen.dart';
 import 'screens/auth_screen.dart'; // Make sure this file exists from previous step!
 
 void main() async {
@@ -94,7 +94,7 @@ class _KeepUpAppState extends State<KeepUpApp> {
         ),
       ),
       // ✅ Routing Logic: Login vs Home
-      home: _isLoggedIn ? const LandingPage() : const AuthScreen(),
+      home: _isLoggedIn ? const SplashScreen() : const AuthScreen(),
     );
   }
 }
