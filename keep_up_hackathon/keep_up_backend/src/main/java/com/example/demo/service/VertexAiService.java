@@ -135,38 +135,34 @@ public class VertexAiService {
         )).getResult().getOutput().getText().trim();
     }
 
-    // ✅ OPTIMIZATION 2: Smart Chat Router (RAG + Fallback)
     public String chatWithSmartRouting(String userQuestion, List<String> localMatches) {
-        boolean foundLocalNews = !localMatches.isEmpty();
-        String context;
+        // 1. Check if we found anything in our local database
+        boolean hasLocalNews = !localMatches.isEmpty();
 
-        if (foundLocalNews) {
-            // CASE A: Local Match Found -> Google Search OFF (Save Money)
-            System.out.println("✅ Local Match Found! Using Database Context.");
-            context = "LOCAL NEWS CONTEXT:\n" + String.join("\n---\n", localMatches);
-        } else {
-            // CASE B: No Match -> Google Search ON (Fallback)
-            System.out.println("🌍 No Match. Google Search ON (Fallback).");
-            context = "No local news found. Please search Google to answer.";
-        }
+        // 2. Prepare the context string
+        String context = hasLocalNews
+                ? "LOCAL NEWS TIMELINE (Correlate these records to answer):\n" + String.join("\n---\n", localMatches)
+                : "No matches found in our local database. Please provide an answer using your internal knowledge and Google Search.";
 
         String systemPrompt = """
-            You are 'KeepUp', a smart AI assistant.
+            You are 'KeepUp', a smart news analyst. 
             
-            INSTRUCTIONS:
-            1. Use the provided Context or Google Search to answer.
-            2. If using Context, cite the specific story.
-            3. Keep answers under 3 lines.
-            
-            CONTEXT:
-            """ + context;
+            DIRECTIONS:
+            1. CORRELATE: If multiple news records are provided in the context, connect them logically (e.g., 'Building on yesterday's report...').
+            2. NEVER SAY "I don't know" or "I lack context". 
+            3. FALLBACK: If the provided 'LOCAL NEWS TIMELINE' is empty or doesn't answer the user, use Google Search grounding to find real-time info.
+            4. Keep answers under 4 lines and very punchy.
 
-        return chatModel.call(new Prompt(systemPrompt + "\nUser: " + userQuestion,
+            CONTEXT:
+            %s
+            """.formatted(context);
+
+        return chatModel.call(new Prompt(systemPrompt + "\nUser Question: " + userQuestion,
                 VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
+                        .model("gemini-2.5-flash") // Flash is cheapest for grounding
                         .temperature(0.3)
-                        // ✅ MAGIC SWITCH: True ONLY if local search failed
-                        .googleSearchRetrieval(!foundLocalNews)
+                        // ✅ CONDITIONAL TOGGLE: Search is only PAID FOR if local matches are empty
+                        .googleSearchRetrieval(!hasLocalNews)
                         .build()
         )).getResult().getOutput().getText();
     }

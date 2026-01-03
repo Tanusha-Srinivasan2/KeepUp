@@ -47,19 +47,14 @@ class _QuizScreenState extends State<QuizScreen> {
     if (selectedIndex == null) return;
 
     if (!isAnswerLocked) {
-      // 1. Validate Answer
       bool isCorrect =
           selectedIndex == widget.questions[currentIndex].correctIndex;
       if (isCorrect) score++;
       setState(() => isAnswerLocked = true);
-    } else if (!showExplanation) {
-      // 2. Show Explanation (Bottom Sheet)
-      _showResultBottomSheet(
-        selectedIndex == widget.questions[currentIndex].correctIndex,
-        widget.questions[currentIndex],
-      );
+
+      // Immediately show the bottom sheet after locking answer
+      _showResultBottomSheet(isCorrect, widget.questions[currentIndex]);
     } else {
-      // 3. Next Question
       _nextQuestion();
     }
   }
@@ -77,10 +72,9 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  // Result Sheet
   void _showResultBottomSheet(bool isCorrect, QuizQuestion question) {
     setState(() => showExplanation = true);
-    _speak(question.explanation); // Auto-speak
+    // ❌ REMOVED: _speak(question.explanation); (No longer automatic)
 
     Map<String, String> topicImages = {
       "Technology":
@@ -114,24 +108,46 @@ class _QuizScreenState extends State<QuizScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                isCorrect ? "Correct!" : "Did You Know?",
-                style: GoogleFonts.poppins(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: isCorrect ? Colors.green : const Color(0xFF2D2D2D),
-                ),
+              // Header Row with Fox Icon (Clickable for TTS)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isCorrect ? "Correct!" : "Did You Know?",
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: isCorrect ? Colors.green : const Color(0xFF2D2D2D),
+                    ),
+                  ),
+                  // ✅ CLICKABLE FOX ICON FOR TTS
+                  GestureDetector(
+                    onTap: () => _speak(question.explanation),
+                    child: Column(
+                      children: [
+                        Image.asset('assets/fox.png', height: 50),
+                        Text(
+                          "Tap to listen",
+                          style: GoogleFonts.poppins(
+                            fontSize: 8,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 15),
               ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: Image.network(
                   imageUrl,
-                  height: 150,
+                  height: 120,
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (c, e, s) =>
-                      Image.asset('assets/fox.png', height: 150),
+                      Container(color: Colors.orange[100], height: 120),
                 ),
               ),
               const SizedBox(height: 15),
@@ -145,7 +161,7 @@ class _QuizScreenState extends State<QuizScreen> {
                   question.explanation,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 15,
+                    fontSize: 14,
                     color: Colors.black87,
                     height: 1.4,
                   ),
@@ -186,19 +202,15 @@ class _QuizScreenState extends State<QuizScreen> {
     );
   }
 
-  // ✅ UPDATED: SAVES DATE TO PREVENT RETRY
   Future<void> _finishQuiz() async {
     setState(() => isSubmitting = true);
-
     int earnedXp = score * 20;
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
 
-    // 1. Save Today's Date
     String today = DateTime.now().toString().split(' ')[0];
     await prefs.setString('last_quiz_date', today);
 
-    // 2. Send XP to Backend
     if (userId != null && earnedXp > 0) {
       try {
         final url = Uri.https(
@@ -220,9 +232,7 @@ class _QuizScreenState extends State<QuizScreen> {
             score: score,
             totalQuestions: widget.questions.length,
             xpEarned: earnedXp,
-            onContinue: () {
-              Navigator.pop(context);
-            },
+            onContinue: () => Navigator.pop(context),
           ),
         ),
       );
