@@ -7,8 +7,10 @@ import com.example.demo.service.UserService;
 import com.example.demo.service.VertexAiService;
 import com.example.demo.service.CatchUpService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -36,49 +38,31 @@ public class NewsController {
         this.quizService = quizService;
     }
 
-    // ✅ 1. USER CREATION ENDPOINT (Matches Flutter's call)
+    // --- USER ENDPOINTS ---
     @PostMapping("/user/create")
     public String createUser(@RequestParam String userId, @RequestParam String name) {
-        System.out.println("🆕 Creating User: " + name + " (" + userId + ")");
         return userService.createUser(userId, name);
     }
 
-    // ✅ 2. UPDATE NAME ENDPOINT (Matches Pencil Icon)
     @PostMapping("/user/updateName")
     public String updateName(@RequestParam String userId, @RequestParam String newName) throws ExecutionException, InterruptedException {
-        System.out.println("✏️ Updating Name for " + userId + " to " + newName);
         return userService.updateUserName(userId, newName);
     }
 
-    // ✅ 3. GET PROFILE ENDPOINT
     @GetMapping("/user/{userId}")
     public Map<String, Object> getUserProfile(@PathVariable String userId) throws Exception {
         return userService.getUserProfile(userId);
     }
 
-    // ... (KEEP ALL YOUR EXISTING NEWS, FEED, CHAT, QUIZ ENDPOINTS BELOW) ...
-
-    // ✅ UPDATED: Pass 'date' to researchNews to force strict date matching
+    // --- NEWS GENERATION & FEED ---
     @GetMapping("/generate")
     public String generateNews(@RequestParam String region, @RequestParam(required = false) String date) {
-        // Use provided date, or default to today
-        String targetDate = (date != null && !date.isEmpty()) ? date : java.time.LocalDate.now().toString();
-
-        System.out.println("🔎 Starting Strict Research for " + targetDate + "...");
-
-        // 1. Pass the DATE to the AI (This is the key fix!)
+        String targetDate = (date != null && !date.isEmpty()) ? date : LocalDate.now().toString();
         String rawFacts = vertexAiService.researchNews(region, targetDate);
-
-        System.out.println("🎨 Formatting News...");
         String toonJson = vertexAiService.formatToToonJson(rawFacts);
-
-        // 2. Save with the SAME date so it goes into the correct "Day Box"
         newsIndexingService.processAndSave(toonJson, targetDate);
-
-        System.out.println("🎓 Creating Daily Quiz...");
         String quizJson = vertexAiService.generateQuizFromNews(rawFacts);
         quizService.saveDailyQuiz(quizJson);
-
         return "Generation Complete for " + targetDate;
     }
 
@@ -87,27 +71,38 @@ public class NewsController {
         return newsIndexingService.getAllNewsSegments(date);
     }
 
-    @GetMapping("/catchup")
-    public List<Map<String, Object>> getCatchUp() throws Exception {
-        return catchUpService.getWeeklyCatchUp("US");
-    }
-
     @GetMapping("/chat")
     public String chatWithNews(@RequestParam String question) {
-        // 1. Get Keywords (Cheap)
         String keywords = vertexAiService.extractSearchKeywords(question);
-        System.out.println("🔍 Search Keywords: " + keywords);
-
-        // 2. Search Database (Free)
         List<Toon> matches = newsIndexingService.searchNewsByKeywords(keywords);
-
-        // 3. Prepare Content
         List<String> matchStrings = matches.stream()
                 .map(t -> t.getTitle() + ": " + t.getDescription())
                 .collect(Collectors.toList());
-
-        // 4. Generate Answer (Smart Cost Routing)
         return vertexAiService.chatWithSmartRouting(question, matchStrings);
+    }
+
+    // --- QUIZ & XP (CRITICAL UPDATES) ---
+
+    // ✅ FIXED: userId is now OPTIONAL (required = false)
+    // This stops the "MissingServletRequestParameterException" crash.
+    @GetMapping("/quiz")
+    public ResponseEntity<?> getQuiz(@RequestParam(required = false) String userId) throws ExecutionException, InterruptedException {
+        // We deliver the quiz to everyone so the app doesn't break.
+        // The "Limit" is enforced in the /user/xp endpoint instead.
+        String quizJson = quizService.getDailyQuiz();
+        return ResponseEntity.ok(quizJson);
+    }
+
+    @PostMapping("/user/xp")
+    public String addXp(@RequestParam String userId, @RequestParam int points) throws Exception {
+        // The Service will now check if they played today before adding points.
+        return userService.addXp(userId, points);
+    }
+
+    // --- LEADERBOARD & BOOKMARKS ---
+    @GetMapping("/leaderboard")
+    public List<Map<String, Object>> getLeaderboard() throws ExecutionException, InterruptedException {
+        return userService.getGlobalLeaderboard();
     }
 
     @PostMapping("/user/{userId}/bookmark")
@@ -125,18 +120,8 @@ public class NewsController {
         return userService.getBookmarks(userId);
     }
 
-    @GetMapping("/quiz")
-    public String getQuiz() throws ExecutionException, InterruptedException {
-        return quizService.getDailyQuiz();
-    }
-
-    @GetMapping("/leaderboard")
-    public List<Map<String, Object>> getLeaderboard() throws ExecutionException, InterruptedException {
-        return userService.getGlobalLeaderboard();
-    }
-
-    @PostMapping("/user/xp")
-    public String addXp(@RequestParam String userId, @RequestParam int points) throws Exception {
-        return userService.addXp(userId, points);
+    @GetMapping("/catchup")
+    public List<Map<String, Object>> getCatchUp() throws Exception {
+        return catchUpService.getWeeklyCatchUp("US");
     }
 }

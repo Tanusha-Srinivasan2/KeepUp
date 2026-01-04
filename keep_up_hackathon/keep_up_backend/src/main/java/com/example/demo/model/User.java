@@ -5,15 +5,19 @@ public class User {
     private String username;
     private int xp;
     private String league; // "Bronze", "Silver", "Gold"
+    private String cohortId;
 
-    // Empty constructor is REQUIRED for Firestore to work
-    public User() {}
+    // ✅ NEW: Tracks when they last earned points
+    private String lastQuizDate;
+
+    public User() {} // Required for Firestore
 
     public User(String userId, String username) {
         this.userId = userId;
         this.username = username;
         this.xp = 0;
-        this.league = "Bronze"; // Everyone starts at the bottom
+        this.league = "Bronze";
+        this.lastQuizDate = ""; // Default empty
     }
 
     // Getters and Setters
@@ -25,10 +29,9 @@ public class User {
     public void setXp(int xp) { this.xp = xp; }
     public String getLeague() { return league; }
     public void setLeague(String league) { this.league = league; }
-    // Inside User.java
-    private String cohortId; // e.g., "Bronze-5"
-
-    // Add Getter and Setter
     public String getCohortId() { return cohortId; }
-    //public void setCohortId(String cohortId) { this.cohortId = cohortId; }//for later if random cohort simulation needed
+
+    // ✅ Getter/Setter for Date
+    public String getLastQuizDate() { return lastQuizDate; }
+    public void setLastQuizDate(String lastQuizDate) { this.lastQuizDate = lastQuizDate; }
 }
