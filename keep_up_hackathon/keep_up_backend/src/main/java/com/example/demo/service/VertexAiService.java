@@ -65,12 +65,9 @@ public class VertexAiService {
             INPUT FACTS:
             """ + rawFacts;
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .temperature(0.2)
-                        .build()
-        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
+        return cleanJson(chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.2).build()
+        )).getResult().getOutput().getText());
     }
 
     // --- PHASE 3: MAIN DAILY QUIZ ---
@@ -81,37 +78,35 @@ public class VertexAiService {
             SCHEMA:
             [
               {
+                "topic": "General",
                 "question": "The actual question?",
                 "options": ["Wrong 1", "Correct Answer", "Wrong 2"],
                 "correctIndex": 1,
-                "explanation": "Short explanation (EL15)."
+                "explanation": "Short explanation."
               }
             ]
             NEWS FACTS:
             """ + rawFacts;
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .temperature(0.4)
-                        .build()
-        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
+        return cleanJson(chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.4).build()
+        )).getResult().getOutput().getText());
     }
 
-    // --- PHASE 4: CATEGORY-WISE QUIZ (NEW) ---
+    // --- PHASE 4: CATEGORY-WISE QUIZ ---
     public String generateCategoryWiseQuiz(String dailyNewsContext) {
         String prompt = """
         You are a Quiz Master. Based on the provided news context, generate 3 multiple-choice questions for EACH distinct category found.
         
         RULES:
         1. Output STRICT JSON only. Do not use Markdown.
-        2. The keys must be the Category Names (Title Case).
+        2. The keys must be the Category Names (Title Case: Technology, Sports, etc.).
         3. Each category must have a list of 3 questions.
         
         SCHEMA:
         {
           "Technology": [
-            { "question": "...", "options": ["A", "B", "C", "D"], "answer": "A", "explanation": "..." },
+            { "topic": "Technology", "question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "..." },
             { ... }
           ],
           "Sports": [ ... ],
@@ -121,22 +116,19 @@ public class VertexAiService {
         NEWS CONTEXT:
         """ + dailyNewsContext;
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .temperature(0.4)
-                        .build()
-        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
+        return cleanJson(chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.4).build()
+        )).getResult().getOutput().getText());
     }
 
-    // --- OPTIMIZATION: KEYWORDS ---
+    // --- KEYWORD EXTRACTION ---
     public String extractSearchKeywords(String userQuestion) {
         return chatModel.call(new Prompt("Extract 1-3 search keywords from: " + userQuestion,
                 VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.0).build()
         )).getResult().getOutput().getText().trim();
     }
 
-    // --- SMART ROUTING ---
+    // --- SMART ROUTING CHAT ---
     public String chatWithSmartRouting(String userQuestion, List<String> localMatches) {
         boolean hasLocalNews = !localMatches.isEmpty();
         String context = hasLocalNews ? "LOCAL NEWS:\n" + String.join("\n", localMatches) : "No local match.";
@@ -150,36 +142,32 @@ public class VertexAiService {
         )).getResult().getOutput().getText();
     }
 
-    // --- ✅ PHASE 5: CATCH UP (RESTORED THIS METHOD) ---
+    // --- ✅ PHASE 5: CATCH UP CONTENT (RESTORED THIS METHOD) ---
     public String generateCatchUpContent(String databaseNews) {
         String prompt = """
             You are a News Recap Assistant.
             Task: Summarize the provided news stories into a 'Daily Recap' format.
-            
-            RULES:
-            1. Use ONLY the provided input text.
-            2. Summarize the events in very simple, easy-to-understand language.
-            3. Output strict JSON only.
-            
+            RULES: Output strict JSON only.
             SCHEMA:
             [
               {
                 "topic": "Technology",
-                "title": "Headline text here",
-                "description": "Short summary of the event.",
-                "time": "4h ago",
-                "imageUrl": "https://images.unsplash.com/..."
+                "title": "Headline",
+                "description": "Summary",
+                "time": "Today",
+                "imageUrl": "..."
               }
             ]
-            
-            INPUT NEWS CONTEXT:
+            INPUT:
             """ + databaseNews;
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .temperature(0.5)
-                        .build()
-        )).getResult().getOutput().getText().replace("```json", "").replace("```", "").trim();
+        return cleanJson(chatModel.call(new Prompt(prompt,
+                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.5).build()
+        )).getResult().getOutput().getText());
+    }
+
+    // Helper to remove Markdown
+    private String cleanJson(String text) {
+        return text.replace("```json", "").replace("```", "").trim();
     }
 }
