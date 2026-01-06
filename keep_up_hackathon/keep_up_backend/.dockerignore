@@ -1,0 +1,30 @@
+# Exclude secrets from Docker build context
+secrets/
+*.json
+
+# Exclude git history
+.git
+.gitignore
+.gitattributes
+
+# Exclude build artifacts
+target/
+.mvn/
+mvnw
+mvnw.cmd
+
+# Exclude IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Exclude environment files
+.env
+*.log
+
+# Exclude documentation
+README.md
+HELP.md
