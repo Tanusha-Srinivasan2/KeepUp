@@ -28,8 +28,8 @@ public class UserService {
             user.put("xp", 100);
             user.put("streak", 1);
             user.put("rank", 999);
-            // ✅ Initialize lastQuizDate
-            user.put("lastQuizDate", "");
+            // ✅ Initialize empty map for tracking categories
+            user.put("lastPlayed", new HashMap<String, String>());
 
             userRef.set(user);
             return "User Created";
@@ -64,27 +64,34 @@ public class UserService {
         return doc.exists() ? doc.toObject(User.class) : null;
     }
 
-    // ✅ THE XP LOCK LOGIC
-    public String addXp(String userId, int points) throws ExecutionException, InterruptedException {
+    // ✅ UPDATED XP LOCK LOGIC (Per Category)
+    public String addXp(String userId, int points, String category) throws ExecutionException, InterruptedException {
         Firestore db = FirestoreClient.getFirestore();
         DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
 
-        // 1. Fetch current status
+        // 1. Fetch current user data
         DocumentSnapshot doc = userRef.get().get();
         if (!doc.exists()) return "User not found";
 
         String today = LocalDate.now().toString();
-        String lastDate = doc.getString("lastQuizDate");
 
-        // 2. CHECK: If they already played today, deny points
-        if (today.equals(lastDate)) {
-            System.out.println("⛔ XP Blocked: User " + userId + " already played today.");
-            return "Daily limit reached";
+        // 2. Get the "lastPlayed" map (handle nulls safely)
+        Map<String, String> lastPlayed = (Map<String, String>) doc.get("lastPlayed");
+        if (lastPlayed == null) lastPlayed = new HashMap<>();
+
+        // 3. CHECK: Did they play THIS specific category today?
+        String lastDateForCategory = lastPlayed.getOrDefault(category, "");
+
+        if (today.equals(lastDateForCategory)) {
+            System.out.println("⛔ XP Blocked: " + category + " already played today by " + userId);
+            return "Daily limit reached for " + category;
         }
 
-        // 3. SUCCESS: Add points AND lock the date
+        // 4. SUCCESS: Add points AND lock this specific category
+        lastPlayed.put(category, today); // Update the map
+
         userRef.update("xp", FieldValue.increment(points));
-        userRef.update("lastQuizDate", today);
+        userRef.update("lastPlayed", lastPlayed); // Save the map back to DB
 
         return "XP Added";
     }

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http; // Kept for consistency
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/quiz_model.dart';
 import '../main.dart'; // KeepUpApp colors
-import 'quiz_result_screen.dart'; // ✅ Import Result Screen
+import 'quiz_result_screen.dart';
+import '../models/quiz_model.dart'; // ✅ Ensure this file exists!
 
 class QuizScreen extends StatefulWidget {
   final List<QuizQuestion> questions;
-  const QuizScreen({super.key, required this.questions});
+  final String quizId;
+
+  const QuizScreen({super.key, required this.questions, required this.quizId});
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -26,10 +28,58 @@ class _QuizScreenState extends State<QuizScreen> {
 
   final FlutterTts flutterTts = FlutterTts();
 
+  // ✅ Randomized State Variables
+  List<String> currentShuffledOptions = [];
+  int currentCorrectIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuestion();
+  }
+
   @override
   void dispose() {
     flutterTts.stop();
     super.dispose();
+  }
+
+  // ✅ ROBUST SHUFFLING LOGIC
+  void _loadQuestion() {
+    final question = widget.questions[currentIndex];
+
+    // 1. Create indices [0, 1, 2, 3]
+    List<int> originalIndices = List.generate(
+      question.options.length,
+      (index) => index,
+    );
+
+    // 2. Shuffle them!
+    originalIndices.shuffle();
+
+    setState(() {
+      // 3. Reorder the text options based on shuffled indices
+      currentShuffledOptions = originalIndices.map((index) {
+        return question.options[index];
+      }).toList();
+
+      // 4. Find where the ORIGINAL correct answer moved to
+      // Example: If correct was 0, and 0 moved to index 3, this returns 3.
+      currentCorrectIndex = originalIndices.indexOf(question.correctIndex);
+
+      // Debug Print to Console
+      print("--- Question ${currentIndex + 1} ---");
+      print("Shuffled Layout: $originalIndices");
+      print("New Correct Slot: Index $currentCorrectIndex");
+      print(
+        "Correct Answer Text: ${currentShuffledOptions[currentCorrectIndex]}",
+      );
+
+      // Reset UI state
+      selectedIndex = null;
+      isAnswerLocked = false;
+      showExplanation = false;
+    });
   }
 
   Future<void> _speak(String text) async {
@@ -47,12 +97,12 @@ class _QuizScreenState extends State<QuizScreen> {
     if (selectedIndex == null) return;
 
     if (!isAnswerLocked) {
-      bool isCorrect =
-          selectedIndex == widget.questions[currentIndex].correctIndex;
+      // ✅ VITAL: Compare selected index with the SHUFFLED correct index
+      bool isCorrect = selectedIndex == currentCorrectIndex;
+
       if (isCorrect) score++;
       setState(() => isAnswerLocked = true);
 
-      // Immediately show the bottom sheet after locking answer
       _showResultBottomSheet(isCorrect, widget.questions[currentIndex]);
     } else {
       _nextQuestion();
@@ -63,10 +113,8 @@ class _QuizScreenState extends State<QuizScreen> {
     if (currentIndex < widget.questions.length - 1) {
       setState(() {
         currentIndex++;
-        selectedIndex = null;
-        isAnswerLocked = false;
-        showExplanation = false;
       });
+      _loadQuestion(); // ✅ Shuffle the next question immediately
     } else {
       _finishQuiz();
     }
@@ -74,7 +122,6 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _showResultBottomSheet(bool isCorrect, QuizQuestion question) {
     setState(() => showExplanation = true);
-    // ❌ REMOVED: _speak(question.explanation); (No longer automatic)
 
     Map<String, String> topicImages = {
       "Technology":
@@ -97,105 +144,113 @@ class _QuizScreenState extends State<QuizScreen> {
       context: context,
       isDismissible: false,
       enableDrag: false,
+      isScrollControlled: true, // ✅ Allows scrolling if content is long
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           decoration: const BoxDecoration(
             color: Color(0xFFFFF9E5),
             borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header Row with Fox Icon (Clickable for TTS)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    isCorrect ? "Correct!" : "Did You Know?",
-                    style: GoogleFonts.poppins(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: isCorrect ? Colors.green : const Color(0xFF2D2D2D),
+          child: SingleChildScrollView(
+            // ✅ Makes the popup scrollable
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isCorrect ? "Correct!" : "Did You Know?",
+                      style: GoogleFonts.poppins(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: isCorrect
+                            ? Colors.green
+                            : const Color(0xFF2D2D2D),
+                      ),
                     ),
-                  ),
-                  // ✅ CLICKABLE FOX ICON FOR TTS
-                  GestureDetector(
-                    onTap: () => _speak(question.explanation),
-                    child: Column(
-                      children: [
-                        Image.asset('assets/fox.png', height: 50),
-                        Text(
-                          "Tap to listen",
-                          style: GoogleFonts.poppins(
-                            fontSize: 8,
-                            color: Colors.grey,
+                    GestureDetector(
+                      onTap: () => _speak(question.explanation),
+                      child: Column(
+                        children: [
+                          Image.asset('assets/fox.png', height: 50),
+                          Text(
+                            "Tap to listen",
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              color: Colors.grey,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Image.network(
-                  imageUrl,
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c, e, s) =>
-                      Container(color: Colors.orange[100], height: 120),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 15),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  question.explanation,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    color: Colors.black87,
-                    height: 1.4,
+                const SizedBox(height: 15),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.network(
+                    imageUrl,
+                    height: 150,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) =>
+                        Container(color: Colors.orange[100], height: 120),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    flutterTts.stop();
-                    Navigator.pop(context);
-                    _nextQuestion();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2D2D2D),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                const SizedBox(height: 15),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
                   ),
                   child: Text(
-                    currentIndex < widget.questions.length - 1
-                        ? "Next Question"
-                        : "Finish Quiz",
+                    question.explanation,
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.black87,
+                      height: 1.4,
                     ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      flutterTts.stop();
+                      Navigator.pop(context);
+                      _nextQuestion();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2D2D2D),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: Text(
+                      currentIndex < widget.questions.length - 1
+                          ? "Next Question"
+                          : "Finish Quiz",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         );
       },
@@ -205,18 +260,19 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _finishQuiz() async {
     setState(() => isSubmitting = true);
     int earnedXp = score * 20;
+
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
 
+    // Lock the quiz locally
     String today = DateTime.now().toString().split(' ')[0];
-    await prefs.setString('last_quiz_date', today);
+    await prefs.setString('last_played_${widget.quizId}', today);
 
+    // Send XP to Backend (Use 10.0.2.2 for Emulator)
     if (userId != null && earnedXp > 0) {
       try {
-        final url = Uri.https(
-          'amalia-trancelike-beulah.ngrok-free.dev',
-          '/api/news/user/xp',
-          {'userId': userId, 'points': earnedXp.toString()},
+        final url = Uri.parse(
+          'http://10.0.2.2:8080/api/news/user/xp?userId=$userId&points=$earnedXp&category=${widget.quizId}',
         );
         await http.post(url);
       } catch (e) {
@@ -239,8 +295,18 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
+  // ✅ CLEANER HELPER: Removes "A. ", "1. ", etc.
+  String _cleanOptionText(String text) {
+    return text.replaceAll(RegExp(r'^[A-D1-4a-d][\.\)]\s*'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 🚨 SAFETY CHECK: If state is lost/stale, reload it
+    if (currentShuffledOptions.isEmpty) {
+      _loadQuestion();
+    }
+
     if (isSubmitting) {
       return const Scaffold(
         backgroundColor: Color(0xFFFEFCE0),
@@ -255,6 +321,7 @@ class _QuizScreenState extends State<QuizScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFEFCE0),
+      // Fox Icon for TTS
       floatingActionButton: GestureDetector(
         onTap: () => _speak(question.question),
         child: Container(
@@ -267,6 +334,7 @@ class _QuizScreenState extends State<QuizScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
+              // Header Row
               Row(
                 children: [
                   IconButton(
@@ -287,6 +355,8 @@ class _QuizScreenState extends State<QuizScreen> {
                 ],
               ),
               const SizedBox(height: 30),
+
+              // Question Card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -318,21 +388,29 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // Options List
               Expanded(
                 child: ListView.separated(
-                  itemCount: question.options.length,
+                  itemCount: currentShuffledOptions.length,
                   separatorBuilder: (c, i) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     bool isSelected = selectedIndex == index;
-                    bool isCorrect = index == question.correctIndex;
+
+                    // ✅ THIS LINE IS THE KEY: Check against SHUFFLED Index
+                    bool isCorrect = index == currentCorrectIndex;
+
                     Color bgColor = Colors.transparent;
                     Color borderColor = const Color(0xFFFFE082);
 
                     if (isAnswerLocked) {
+                      // Logic: Always show the REAL correct answer in Green.
                       if (isCorrect) {
                         bgColor = Colors.green;
                         borderColor = Colors.green;
-                      } else if (isSelected && !isCorrect) {
+                      }
+                      // Logic: If you picked wrong, show Red on your pick.
+                      else if (isSelected && !isCorrect) {
                         bgColor = Colors.redAccent;
                         borderColor = Colors.redAccent;
                       }
@@ -354,7 +432,8 @@ class _QuizScreenState extends State<QuizScreen> {
                           border: Border.all(color: borderColor, width: 2),
                         ),
                         child: Text(
-                          question.options[index],
+                          // Use the clean helper
+                          _cleanOptionText(currentShuffledOptions[index]),
                           textAlign: TextAlign.center,
                           style: GoogleFonts.nunito(
                             fontSize: 16,
@@ -369,6 +448,8 @@ class _QuizScreenState extends State<QuizScreen> {
                   },
                 ),
               ),
+
+              // Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -390,6 +471,17 @@ class _QuizScreenState extends State<QuizScreen> {
                   ),
                 ),
               ),
+
+              // 🧪 DEBUG TEXT (Remove before Finals!)
+              // This shows you the answer so you can verify the logic is working
+              if (!isAnswerLocked)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    "Debug: Answer is at Index $currentCorrectIndex",
+                    style: TextStyle(color: Colors.grey[400], fontSize: 10),
+                  ),
+                ),
             ],
           ),
         ),

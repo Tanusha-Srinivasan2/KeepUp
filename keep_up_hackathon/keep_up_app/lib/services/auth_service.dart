@@ -36,7 +36,7 @@ class AuthService {
 
     try {
       final url = Uri.parse(
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/create?userId=$newId&name=$newName',
+        'http://10.0.2.2:8080/api/news/user/create?userId=$newId&name=$newName',
       );
       final response = await http.post(url);
 

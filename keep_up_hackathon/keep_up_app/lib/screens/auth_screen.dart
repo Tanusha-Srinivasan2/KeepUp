@@ -36,7 +36,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       // 3. Register User in Backend
       final url = Uri.parse(
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/create?userId=$userId&name=$name',
+        'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
       );
       await http.post(url);
 

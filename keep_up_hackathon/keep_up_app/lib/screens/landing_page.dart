@@ -8,6 +8,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../main.dart';
+// ✅ Ensure this import points to your model file
 import '../models/quiz_model.dart';
 
 import 'category_screen.dart';
@@ -32,6 +33,9 @@ class _LandingPageState extends State<LandingPage> {
   String streak = "...";
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
+
+  // ✅ CENTRALIZED URL (Use 10.0.2.2 for Android Emulator)
+  final String baseUrl = "http://10.0.2.2:8080";
 
   final FlutterTts flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -82,9 +86,7 @@ class _LandingPageState extends State<LandingPage> {
     setState(() => username = storedName ?? "Reader");
 
     try {
-      final url = Uri.parse(
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId',
-      );
+      final url = Uri.parse('$baseUrl/api/news/user/$userId');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -156,7 +158,7 @@ class _LandingPageState extends State<LandingPage> {
 
     try {
       final url = Uri.parse(
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/updateName?userId=$userId&newName=$newName',
+        '$baseUrl/api/news/user/updateName?userId=$userId&newName=$newName',
       );
       await http.post(url);
     } catch (e) {
@@ -234,7 +236,6 @@ class _LandingPageState extends State<LandingPage> {
                         ),
                 ),
               ),
-
               GestureDetector(
                 onTap: () async {
                   if (_isListening) {
@@ -245,20 +246,17 @@ class _LandingPageState extends State<LandingPage> {
 
                   bool available = await _speech.initialize(
                     onStatus: (status) {
-                      print('🎤 Status: $status');
                       if (status == 'done' || status == 'notListening') {
                         setModalState(() => _isListening = false);
                       }
                     },
-                    onError: (errorNotification) {
-                      print('❌ Mic Error: $errorNotification');
+                    onError: (error) {
                       setModalState(() => _isListening = false);
                     },
                   );
 
                   if (available) {
                     setModalState(() => _isListening = true);
-
                     _speech.listen(
                       onResult: (val) async {
                         if (val.finalResult) {
@@ -269,10 +267,6 @@ class _LandingPageState extends State<LandingPage> {
                           await _askAI(val.recognizedWords);
                         }
                       },
-                      pauseFor: const Duration(seconds: 10),
-                      listenFor: const Duration(seconds: 30),
-                      cancelOnError: false,
-                      partialResults: true,
                     );
                   }
                 },
@@ -301,16 +295,12 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   Future<void> _askAI(String question) async {
-    final url = Uri.https(
-      'amalia-trancelike-beulah.ngrok-free.dev',
-      '/api/news/chat',
-      {'question': question},
-    );
+    // ✅ Use baseUrl (10.0.2.2) instead of localhost
+    final url = Uri.parse('$baseUrl/api/news/chat?question=$question');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         if (mounted) Navigator.pop(context);
-
         if (mounted) {
           Navigator.push(
             context,
@@ -326,23 +316,21 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  // ✅ MODIFIED: Added logic to check if quiz was already attempted today
+  // ✅ UPDATED: Daily Quiz Logic
   Future<void> _startQuiz() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Get the date of the last quiz attempt
-    String? lastQuizDate = prefs.getString('last_quiz_date');
-
-    // Get today's date formatted as YYYY-MM-DD
+    // 1. Check if "Daily" was played today
+    // Note: We changed key from 'last_quiz_date' to 'last_played_Daily' for consistency
+    String? lastQuizDate = prefs.getString('last_played_Daily');
     String today = DateTime.now().toIso8601String().split('T')[0];
 
-    // If they already did it today, show a message and stop
     if (lastQuizDate == today) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "You've already completed today's challenge! Come back tomorrow.",
+              "You've completed today's challenge! Try a Category Quiz.",
               style: GoogleFonts.poppins(),
             ),
             backgroundColor: Colors.orange,
@@ -356,11 +344,12 @@ class _LandingPageState extends State<LandingPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Generating Daily Challenge...")),
     );
+
     try {
-      final url = Uri.parse(
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/quiz',
-      );
+      // ✅ Use baseUrl (10.0.2.2)
+      final url = Uri.parse('$baseUrl/api/news/quiz');
       final response = await http.get(url);
+
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
         final List<QuizQuestion> questions = quizData
@@ -371,17 +360,21 @@ class _LandingPageState extends State<LandingPage> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => QuizScreen(questions: questions),
+              builder: (context) => QuizScreen(
+                questions: questions,
+                quizId: "Daily", // ✅ IMPORTANT: Pass "Daily" ID
+              ),
             ),
           );
-          _fetchUserData();
+          _fetchUserData(); // Refresh stats after quiz
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Could not load quiz.")));
+      }
     } finally {
       if (mounted) setState(() => isLoadingQuiz = false);
     }

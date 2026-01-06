@@ -88,11 +88,9 @@ class _VoiceAssistantButtonState extends State<VoiceAssistantButton> {
 
     try {
       // ✅ FIX: Use Uri.http to handle spaces in the question correctly
-      final url = Uri.https(
-        'amalia-trancelike-beulah.ngrok-free.dev',
-        '/api/news/chat',
-        {'question': question},
-      );
+      final url = Uri.https('localhost:8080', '/api/news/chat', {
+        'question': question,
+      });
 
       print("🚀 LOG: Sending request to $url");
 

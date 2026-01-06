@@ -110,8 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchNews(String category) async {
     setState(() => isLoading = true);
     // ✅ Updated to use HTTPS
-    String baseUrl =
-        'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/feed';
+    String baseUrl = 'http://10.0.2.2:8080/api/news/feed';
 
     if (_selectedDate != null) {
       String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate!);
@@ -260,11 +259,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _askAI(String question) async {
     String contextInfo =
         "Context: Browsing ${_categories[_selectedCategoryIndex]} news.";
-    final url = Uri.https(
-      'amalia-trancelike-beulah.ngrok-free.dev',
-      '/api/news/chat',
-      {'question': "$contextInfo Question: $question"},
-    );
+    final url = Uri.https('localhost:8080', '/api/news/chat', {
+      'question': "$contextInfo Question: $question",
+    });
 
     try {
       final response = await http.get(url);
@@ -293,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String? userId = prefs.getString('user_id');
     if (userId == null) return;
     final url = Uri.parse(
-      'https://amalia-trancelike-beulah.ngrok-free.dev/api/news/user/$userId/bookmark',
+      'http://10.0.2.2:8080/api/news/user/$userId/bookmark',
     );
     try {
       await http.post(
