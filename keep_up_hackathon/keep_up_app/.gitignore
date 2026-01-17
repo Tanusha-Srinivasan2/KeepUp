@@ -1,45 +1,70 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# =========================
+# FLUTTER & DART CORE
+# =========================
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
-/build/
-/coverage/
+build/
 
-# Symbolication related
-app.*.symbols
+# =========================
+# ANDROID (Flutter)
+# =========================
+# Gradle build artifacts
+**/android/.gradle/
+**/android/app/build/
+**/android/captures/
 
-# Obfuscation related
-app.*.map.json
+# Local configuration file (contains SDK path - DO NOT COMMIT)
+**/android/local.properties
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Keystores (Never commit your upload keys)
+*.jks
+*.keystore
+*.keyproperties
+
+# =========================
+# IOS (Flutter)
+# =========================
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/.symlinks/
+**/ios/Pods/
+
+# =========================
+# JAVA SPRING BOOT (Backend)
+# =========================
+**/target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/resources/**
+**/help.md
+**/.settings/
+**/.classpath
+**/.project
+**/bin/
+
+# Logs
+logs/
+*.log
+
+# =========================
+# SECRETS & KEYS (CRITICAL)
+# =========================
+# ⚠️ If this is a PUBLIC repo, uncomment the lines below.
+# ⚠️ If this is a PRIVATE hackathon repo and you want teammates 
+# to build instantly, you might choose to keep these commented out.
+
+google-services.json
+GoogleService-Info.plist
+.env
+
+=========================
+IDE & SYSTEM
+=========================
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

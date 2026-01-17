@@ -29,9 +29,7 @@ dependencies:
 
   # ✅ Hardware & Utilities
   url_launcher: ^6.3.2
-  flutter_tts: ^4.2.3
-  speech_to_text: ^7.3.0
-  permission_handler: ^12.0.1
+  google_mobile_ads: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -43,8 +41,23 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
   assets:
-    - assets/
+    - assets/business.png
+    - assets/technology.png
+    - assets/sports.png
+    - assets/politics.png
+    - assets/science.png
+    - assets/fox.png
+    - assets/diamond1.png
+    - assets/diamond2.png
+    - assets/diamond3.png
+    - assets/fire.png
+    - assets/foxlogo.png
+    - assets/gem.png
+    - assets/lightning.png
+    - assets/jumpfox.png
+    - assets/splash_pattern.png
 
 # 👇 Configuration Block (Must match your file name exactly!)
 flutter_launcher_icons:

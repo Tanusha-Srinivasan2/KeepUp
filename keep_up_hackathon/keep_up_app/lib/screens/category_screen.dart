@@ -18,45 +18,38 @@ class CategoryScreen extends StatefulWidget {
 }
 
 class _CategoryScreenState extends State<CategoryScreen> {
-  // Use 10.0.2.2 for Android Emulator, or your NGROK URL
   final String baseUrl = "http://10.0.2.2:8080";
 
+  // ✅ UPDATED: Using Local Assets for Instant Loading
   final List<Map<String, dynamic>> categories = const [
     {
       "name": "Technology",
-      "image":
-          "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1000",
+      "image": "assets/technology.png", // <--- Local Asset
       "color": Color(0xFFFFF9C4),
     },
     {
       "name": "Business",
-      "image":
-          "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000",
+      "image": "assets/business.png",
       "color": Color(0xFFFFE082),
     },
     {
       "name": "Science",
-      "image":
-          "https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=1000",
+      "image": "assets/science.png",
       "color": Color(0xFFFFCC80),
     },
     {
       "name": "Politics",
-      "image":
-          "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=1000",
+      "image": "assets/politics.png",
       "color": Color(0xFFFFB74D),
     },
     {
       "name": "Sports",
-      "image":
-          "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1000",
+      "image": "assets/sports.png",
       "color": Color(0xFFFFA726),
     },
   ];
 
-  // ✅ 1. API CALL: Fetch specific category quiz
   Future<void> _fetchAndStartQuiz(String category) async {
-    // 🛑 Check if played today
     final prefs = await SharedPreferences.getInstance();
     String? lastPlayed = prefs.getString('last_played_$category');
     String today = DateTime.now().toIso8601String().split('T')[0];
@@ -81,7 +74,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       );
       final response = await http.get(url);
 
-      if (mounted) Navigator.pop(context); // Close loading
+      if (mounted) Navigator.pop(context);
 
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
@@ -90,14 +83,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
             .toList();
 
         if (questions.isNotEmpty) {
-          // Navigate and pass category as ID
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => QuizScreen(
-                questions: questions,
-                quizId: category, // ✅ Pass "Technology", "Sports", etc.
-              ),
+              builder: (context) =>
+                  QuizScreen(questions: questions, quizId: category),
             ),
           );
         }
@@ -118,10 +108,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
     ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
-  // ✅ 2. AESTHETIC DIALOG
   void _showCategoryOptions(BuildContext context, String category) {
     const primaryOrange = Colors.orange;
-    const primaryPurple = Color(0xFF673AB7);
     const darkText = Color(0xFF2D2D2D);
     const bodyText = Color(0xFF4B5563);
     const dialogBg = Color(0xFFFFF9E5);
@@ -372,10 +360,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
               top: 0,
               bottom: 0,
               width: 180,
-              child: Image.network(
+              // ✅ UPDATED: Use AssetImage instead of NetworkImage
+              child: Image.asset(
                 category['image'],
                 fit: BoxFit.cover,
-                errorBuilder: (c, o, s) => Container(color: Colors.grey),
+                // Removed errorBuilder since assets are guaranteed to exist
               ),
             ),
             Container(

@@ -1,143 +1,181 @@
 package com.example.demo.service;
 
+import com.example.demo.model.User;
+import com.example.demo.repository.ToonRepository;
+import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.*;
 import com.google.firebase.cloud.FirestoreClient;
-import com.example.demo.model.Toon;
-import com.example.demo.model.User;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 @Service
 public class UserService {
 
-    private static final String COLLECTION_NAME = "users";
+    private final ToonRepository toonRepository;
 
-    public String createUser(String userId, String name) {
-        try {
-            Firestore db = FirestoreClient.getFirestore();
-            DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
-
-            if (userRef.get().get().exists()) return "User already exists";
-
-            Map<String, Object> user = new HashMap<>();
-            user.put("userId", userId);
-            user.put("name", name);
-            user.put("xp", 100);
-            user.put("streak", 1);
-            user.put("rank", 999);
-            // ✅ Initialize empty map for tracking categories
-            user.put("lastPlayed", new HashMap<String, String>());
-
-            userRef.set(user);
-            return "User Created";
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error";
-        }
+    public UserService(ToonRepository toonRepository) {
+        this.toonRepository = toonRepository;
     }
 
-    public String updateUserName(String userId, String newName) throws ExecutionException, InterruptedException {
-        FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId).update("name", newName);
-        return "Name Updated";
-    }
-
+    // --- 1. GET USER PROFILE (Calculates Rank on the Fly) ---
     public Map<String, Object> getUserProfile(String userId) throws ExecutionException, InterruptedException {
         Firestore db = FirestoreClient.getFirestore();
-        DocumentSnapshot doc = db.collection(COLLECTION_NAME).document(userId).get().get();
+        DocumentSnapshot userSnap = db.collection("users").document(userId).get().get();
 
-        if (!doc.exists()) {
-            createUser(userId, "Reader");
-            return getUserProfile(userId);
+        if (userSnap.exists()) {
+            Map<String, Object> userData = userSnap.getData();
+            long currentXp = Long.parseLong(userData.getOrDefault("xp", 0).toString());
+
+            // Calculate Rank: Count users with MORE XP than this user
+            AggregateQuerySnapshot snapshot = db.collection("users")
+                    .whereGreaterThan("xp", currentXp)
+                    .count()
+                    .get()
+                    .get();
+
+            userData.put("rank", snapshot.getCount() + 1);
+            return userData;
+        } else {
+            return Map.of("error", "User not found");
         }
-
-        Map<String, Object> userData = doc.getData();
-        long xp = (long) userData.getOrDefault("xp", 0L);
-        userData.put("rank", getRank(xp));
-        return userData;
     }
 
-    public User getUserObject(String userId) throws ExecutionException, InterruptedException {
-        DocumentSnapshot doc = FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId).get().get();
-        return doc.exists() ? doc.toObject(User.class) : null;
+    // --- 2. CREATE USER ---
+    public String createUser(String userId, String name) {
+        Firestore db = FirestoreClient.getFirestore();
+        User newUser = new User(userId, name);
+        db.collection("users").document(userId).set(newUser);
+        return "User Created: " + name;
     }
 
-    // ✅ UPDATED XP LOCK LOGIC (Per Category)
+    // --- 3. ADD XP & UPDATE STREAK ---
     public String addXp(String userId, int points, String category) throws ExecutionException, InterruptedException {
         Firestore db = FirestoreClient.getFirestore();
-        DocumentReference userRef = db.collection(COLLECTION_NAME).document(userId);
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
 
-        // 1. Fetch current user data
-        DocumentSnapshot doc = userRef.get().get();
-        if (!doc.exists()) return "User not found";
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null) {
+                // --- XP & League Logic ---
+                int newXp = user.getXp() + points;
+                user.setXp(newXp);
+                if (newXp > 1000) user.setLeague("Gold");
+                else if (newXp > 500) user.setLeague("Silver");
+                else user.setLeague("Bronze");
 
-        String today = LocalDate.now().toString();
+                // --- Streak Logic ---
+                LocalDate today = LocalDate.now();
+                if (user.getLastActiveDate() != null) {
+                    LocalDate lastActive = LocalDate.parse(user.getLastActiveDate());
+                    long daysBetween = ChronoUnit.DAYS.between(lastActive, today);
 
-        // 2. Get the "lastPlayed" map (handle nulls safely)
-        Map<String, String> lastPlayed = (Map<String, String>) doc.get("lastPlayed");
-        if (lastPlayed == null) lastPlayed = new HashMap<>();
+                    if (daysBetween == 1) {
+                        user.setStreak(user.getStreak() + 1); // Incremented streak
+                    } else if (daysBetween > 1) {
+                        user.setStreak(1); // Reset streak if a day was missed
+                    }
+                }
+                user.setLastActiveDate(today.toString());
 
-        // 3. CHECK: Did they play THIS specific category today?
-        String lastDateForCategory = lastPlayed.getOrDefault(category, "");
+                // --- Category Cooldown Logic ---
+                if (user.getLastPlayed() == null) user.setLastPlayed(new HashMap<>());
+                user.getLastPlayed().put(category, today.toString());
 
-        if (today.equals(lastDateForCategory)) {
-            System.out.println("⛔ XP Blocked: " + category + " already played today by " + userId);
-            return "Daily limit reached for " + category;
+                userRef.set(user);
+                return "XP and Streak updated. Current Streak: " + user.getStreak();
+            }
         }
-
-        // 4. SUCCESS: Add points AND lock this specific category
-        lastPlayed.put(category, today); // Update the map
-
-        userRef.update("xp", FieldValue.increment(points));
-        userRef.update("lastPlayed", lastPlayed); // Save the map back to DB
-
-        return "XP Added";
+        return "User not found.";
     }
 
-    // --- Leaderboard & Bookmarks (Standard) ---
+    // --- 4. UNLOCK QUIZ (For Ad Reward Retry) ---
+    public String unlockQuiz(String userId, String category) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
 
-    private int getRank(long myXp) throws ExecutionException, InterruptedException {
-        AggregateQuerySnapshot snapshot = FirestoreClient.getFirestore().collection(COLLECTION_NAME)
-                .whereGreaterThan("xp", myXp).count().get().get();
-        return (int) snapshot.getCount() + 1;
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null && user.getLastPlayed() != null) {
+                // To allow a retry, we remove the category from the "lastPlayed" map
+                user.getLastPlayed().remove(category);
+                userRef.set(user);
+                return "Category " + category + " unlocked for a bonus try!";
+            }
+        }
+        return "User not found.";
     }
 
+    // --- 5. GLOBAL LEADERBOARD ---
     public List<Map<String, Object>> getGlobalLeaderboard() throws ExecutionException, InterruptedException {
-        List<QueryDocumentSnapshot> docs = FirestoreClient.getFirestore().collection(COLLECTION_NAME)
-                .orderBy("xp", Query.Direction.DESCENDING).limit(10).get().get().getDocuments();
+        Firestore db = FirestoreClient.getFirestore();
+        Query query = db.collection("users").orderBy("xp", Query.Direction.DESCENDING).limit(20);
 
         List<Map<String, Object>> leaderboard = new ArrayList<>();
-        int rank = 1;
-        for (QueryDocumentSnapshot doc : docs) {
+        for (DocumentSnapshot document : query.get().get().getDocuments()) {
             Map<String, Object> entry = new HashMap<>();
-            entry.put("rank", rank++);
-            entry.put("name", doc.getString("name"));
-            entry.put("xp", doc.getLong("xp"));
+            entry.put("name", document.getString("name"));
+            entry.put("xp", document.get("xp"));
+            entry.put("league", document.getString("league"));
             leaderboard.add(entry);
         }
         return leaderboard;
     }
 
-    public String addBookmark(String userId, Toon newsItem) {
-        FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId)
-                .collection("bookmarks").document(newsItem.getId()).set(newsItem);
-        return "Saved";
+    // --- 6. BOOKMARK METHODS (Map-based) ---
+    public String addBookmark(String userId, Map<String, Object> newsItem) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
+
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null) {
+                List<Map<String, Object>> bookmarks = user.getBookmarks();
+                String newId = (String) newsItem.get("id");
+                boolean exists = bookmarks.stream().anyMatch(b -> b.get("id") != null && b.get("id").equals(newId));
+
+                if (!exists) {
+                    bookmarks.add(newsItem);
+                    userRef.set(user);
+                    return "Bookmark Added!";
+                }
+                return "Already bookmarked.";
+            }
+        }
+        return "User not found.";
     }
 
-    public String removeBookmark(String userId, String newsId) {
-        FirestoreClient.getFirestore().collection(COLLECTION_NAME).document(userId)
-                .collection("bookmarks").document(newsId).delete();
-        return "Removed";
+    public List<Map<String, Object>> getBookmarks(String userId) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentSnapshot userSnap = db.collection("users").document(userId).get().get();
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null) return user.getBookmarks();
+        }
+        return Collections.emptyList();
     }
 
-    public List<Toon> getBookmarks(String userId) throws Exception {
-        List<Toon> list = new ArrayList<>();
-        List<QueryDocumentSnapshot> docs = FirestoreClient.getFirestore()
-                .collection(COLLECTION_NAME).document(userId)
-                .collection("bookmarks").get().get().getDocuments();
-        for (QueryDocumentSnapshot d : docs) list.add(d.toObject(Toon.class));
-        return list;
+    public String removeBookmark(String userId, String newsId) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
+
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null) {
+                boolean removed = user.getBookmarks().removeIf(b -> b.get("id") != null && b.get("id").equals(newsId));
+                if (removed) {
+                    userRef.set(user);
+                    return "Bookmark Removed.";
+                }
+            }
+        }
+        return "User not found or bookmark doesn't exist.";
     }
 }

@@ -3,21 +3,20 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../main.dart';
-// ✅ Ensure this import points to your model file
 import '../models/quiz_model.dart';
 
+// Screens
 import 'category_screen.dart';
 import 'leaderboard_screen.dart';
 import 'quiz_screen.dart';
 import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
 import 'auth_screen.dart';
-import 'ai_response_screen.dart';
+import 'chat_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -34,32 +33,87 @@ class _LandingPageState extends State<LandingPage> {
   bool isLoadingQuiz = false;
   int _selectedIndex = 0;
 
-  // ✅ CENTRALIZED URL (Use 10.0.2.2 for Android Emulator)
-  final String baseUrl = "http://10.0.2.2:8080";
+  // ✅ Ad Variables
+  RewardedAd? _rewardedAd;
+  bool _isAdLoaded = false;
 
-  final FlutterTts flutterTts = FlutterTts();
-  final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
-  bool _isThinking = false;
+  final String baseUrl = "http://10.0.2.2:8080";
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
+    _loadRewardedAd();
   }
 
-  @override
-  void dispose() {
-    flutterTts.stop();
-    _speech.cancel();
-    super.dispose();
+  // --- ADMOB LOGIC ---
+  void _loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: 'ca-app-pub-3940256099942544/5224354917', // Test ID
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          setState(() {
+            _rewardedAd = ad;
+            _isAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (error) {
+          print('Ad failed to load: $error');
+          _isAdLoaded = false;
+        },
+      ),
+    );
   }
+
+  void _showStreakRestoreAd(String userId) {
+    if (_rewardedAd == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Ad not ready yet. Try again in a moment."),
+        ),
+      );
+      _loadRewardedAd();
+      return;
+    }
+
+    _rewardedAd!.show(
+      onUserEarnedReward: (ad, reward) async {
+        Navigator.pop(context);
+        await _callRestoreStreakApi(userId);
+      },
+    );
+
+    _rewardedAd = null;
+    _isAdLoaded = false;
+    _loadRewardedAd();
+  }
+
+  Future<void> _callRestoreStreakApi(String userId) async {
+    try {
+      final url = Uri.parse('$baseUrl/api/news/user/$userId/restore-streak');
+      final response = await http.post(url);
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("🔥 Streak Restored! Play now to keep it."),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _fetchUserData();
+      }
+    } catch (e) {
+      print("Error restoring streak: $e");
+    }
+  }
+
+  // --- AUTH & DATA LOGIC ---
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     await GoogleSignIn().signOut();
-
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const AuthScreen()),
@@ -74,12 +128,11 @@ class _LandingPageState extends State<LandingPage> {
     String? storedName = prefs.getString('user_name');
 
     if (userId == null) {
-      if (mounted) {
+      if (mounted)
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const AuthScreen()),
         );
-      }
       return;
     }
 
@@ -94,9 +147,11 @@ class _LandingPageState extends State<LandingPage> {
         if (mounted) {
           setState(() {
             xp = (data['xp'] ?? 0).toString();
+            // ✅ UPDATED: Added # prefix for Rank
             rank = (data['rank'] ?? 0).toString();
             streak = (data['streak'] ?? 1).toString();
           });
+          _checkStreakStatus(data, userId);
         }
       }
     } catch (e) {
@@ -104,252 +159,106 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  void _showEditNameDialog() {
-    TextEditingController nameController = TextEditingController(
-      text: username,
-    );
+  void _checkStreakStatus(Map<String, dynamic> data, String userId) {
+    String? lastActiveStr = data['lastActiveDate'];
+    if (lastActiveStr == null) return;
 
+    DateTime lastActive = DateTime.parse(lastActiveStr);
+    DateTime yesterday = DateTime.now().subtract(const Duration(days: 1));
+    DateTime today = DateTime.now();
+
+    DateTime lastDateOnly = DateTime(
+      lastActive.year,
+      lastActive.month,
+      lastActive.day,
+    );
+    DateTime yesterdayOnly = DateTime(
+      yesterday.year,
+      yesterday.month,
+      yesterday.day,
+    );
+    DateTime todayOnly = DateTime(today.year, today.month, today.day);
+
+    if (lastDateOnly.isBefore(yesterdayOnly) && lastDateOnly != todayOnly) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showStreakLostDialog(userId);
+      });
+    }
+  }
+
+  void _showStreakLostDialog(String userId) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            "Change Username",
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-          ),
-          content: TextField(
-            controller: nameController,
-            decoration: const InputDecoration(
-              labelText: "New Username",
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: KeepUpApp.primaryYellow,
-              ),
-              onPressed: () async {
-                String newName = nameController.text.trim();
-                if (newName.isNotEmpty) {
-                  await _updateNameInBackend(newName);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-              child: const Text("Save", style: TextStyle(color: Colors.black)),
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF9E5),
+        title: Row(
+          children: [
+            const Icon(Icons.broken_image, color: Colors.red),
+            const SizedBox(width: 10),
+            Text(
+              "Streak Broken!",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
             ),
           ],
-        );
-      },
-    );
-  }
-
-  Future<void> _updateNameInBackend(String newName) async {
-    final prefs = await SharedPreferences.getInstance();
-    String? userId = prefs.getString('user_id');
-    if (userId == null) return;
-
-    setState(() => username = newName);
-    await prefs.setString('user_name', newName);
-
-    try {
-      final url = Uri.parse(
-        '$baseUrl/api/news/user/updateName?userId=$userId&newName=$newName',
-      );
-      await http.post(url);
-    } catch (e) {
-      print("Error updating name: $e");
-    }
-  }
-
-  void _showChatModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildChatSheet(),
-    );
-  }
-
-  Widget _buildChatSheet() {
-    return StatefulBuilder(
-      builder: (context, setModalState) {
-        return Container(
-          height: 400,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Image.asset('assets/fox.png', width: 40, height: 40),
-                      const SizedBox(width: 10),
-                      Text(
-                        "How can I help?",
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const Divider(),
-              Expanded(
-                child: Center(
-                  child: _isThinking
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(
-                              color: Colors.orange,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              "Checking the news...",
-                              style: GoogleFonts.poppins(color: Colors.grey),
-                            ),
-                          ],
-                        )
-                      : Text(
-                          "Tap the mic to start speaking.\nTap again to stop.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.black54,
-                          ),
-                        ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () async {
-                  if (_isListening) {
-                    setModalState(() => _isListening = false);
-                    _speech.stop();
-                    return;
-                  }
-
-                  bool available = await _speech.initialize(
-                    onStatus: (status) {
-                      if (status == 'done' || status == 'notListening') {
-                        setModalState(() => _isListening = false);
-                      }
-                    },
-                    onError: (error) {
-                      setModalState(() => _isListening = false);
-                    },
-                  );
-
-                  if (available) {
-                    setModalState(() => _isListening = true);
-                    _speech.listen(
-                      onResult: (val) async {
-                        if (val.finalResult) {
-                          setModalState(() {
-                            _isListening = false;
-                            _isThinking = true;
-                          });
-                          await _askAI(val.recognizedWords);
-                        }
-                      },
-                    );
-                  }
-                },
-                child: CircleAvatar(
-                  radius: 35,
-                  backgroundColor: _isListening
-                      ? Colors.redAccent
-                      : Colors.orange,
-                  child: Icon(
-                    _isListening ? Icons.stop : Icons.mic,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _isListening ? "Listening..." : "Tap to Speak",
-                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _askAI(String question) async {
-    // ✅ Use baseUrl (10.0.2.2) instead of localhost
-    final url = Uri.parse('$baseUrl/api/news/chat?question=$question');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        if (mounted) Navigator.pop(context);
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AiResponseScreen(text: response.body),
+        ),
+        content: Text(
+          "You missed a day! Watch a short ad to restore your streak freeze and keep your progress.",
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "No thanks",
+              style: GoogleFonts.poppins(color: Colors.grey),
             ),
-          );
-        }
-      }
-    } catch (e) {
-      print("AI Error: $e");
-      await flutterTts.speak("Sorry, I'm having trouble connecting.");
-    }
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _showStreakRestoreAd(userId),
+            icon: const Icon(Icons.play_circle_filled, color: Colors.white),
+            label: Text(
+              "Watch Ad",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+          ),
+        ],
+      ),
+    );
   }
 
-  // ✅ UPDATED: Daily Quiz Logic
+  // ✅ UPDATED: Enforce Daily Limit + Bonus Try logic
   Future<void> _startQuiz() async {
     final prefs = await SharedPreferences.getInstance();
-
-    // 1. Check if "Daily" was played today
-    // Note: We changed key from 'last_quiz_date' to 'last_played_Daily' for consistency
-    String? lastQuizDate = prefs.getString('last_played_Daily');
     String today = DateTime.now().toIso8601String().split('T')[0];
 
-    if (lastQuizDate == today) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "You've completed today's challenge! Try a Category Quiz.",
-              style: GoogleFonts.poppins(),
-            ),
-            backgroundColor: Colors.orange,
+    // 1. Check if they already played today
+    bool alreadyPlayed = prefs.getString('last_played_Daily') == today;
+
+    // 2. Check if they have an unlocked retry from an ad
+    bool hasRetryUnlocked = prefs.getBool('retry_unlocked_Daily') ?? false;
+
+    if (alreadyPlayed && !hasRetryUnlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "You've completed today's challenge! Watch an ad on the results screen to earn a bonus try.",
+            style: GoogleFonts.poppins(),
           ),
-        );
-      }
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
     setState(() => isLoadingQuiz = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Generating Daily Challenge...")),
-    );
-
     try {
-      // ✅ Use baseUrl (10.0.2.2)
       final url = Uri.parse('$baseUrl/api/news/quiz');
       final response = await http.get(url);
-
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
         final List<QuizQuestion> questions = quizData
@@ -357,57 +266,73 @@ class _LandingPageState extends State<LandingPage> {
             .toList();
 
         if (mounted) {
+          // 3. Consume the retry token if it was being used
+          if (hasRetryUnlocked) {
+            await prefs.setBool('retry_unlocked_Daily', false);
+          }
+
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => QuizScreen(
-                questions: questions,
-                quizId: "Daily", // ✅ IMPORTANT: Pass "Daily" ID
-              ),
+              builder: (context) =>
+                  QuizScreen(questions: questions, quizId: "Daily"),
             ),
           );
-          _fetchUserData(); // Refresh stats after quiz
+          _fetchUserData();
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Could not load quiz.")));
-      }
+      print("Error fetching quiz: $e");
     } finally {
       if (mounted) setState(() => isLoadingQuiz = false);
     }
   }
 
   void _onItemTapped(int index) async {
-    if (index == 1) {
+    if (index == 1)
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const CategoryScreen()),
       );
-    } else if (index == 2) {
+    else if (index == 2) {
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const LeaderboardScreen()),
       );
       _fetchUserData();
-    } else {
+    } else
       setState(() => _selectedIndex = index);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5),
+      floatingActionButton: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ChatScreen()),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.orange.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Image.asset('assets/fox.png', width: 75, height: 75),
+        ),
+      ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.brown),
-            tooltip: 'Logout',
+            icon: const Icon(Icons.logout, color: Color(0xFF2D2D2D)),
             onPressed: _logout,
           ),
         ],
@@ -416,52 +341,33 @@ class _LandingPageState extends State<LandingPage> {
           children: [
             _buildTopStat('assets/lightning.png', xp),
             _buildTopStat('assets/fire.png', streak),
-            _buildTopStat(
-              'assets/gem.png',
-              rank,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const LeaderboardScreen(),
-                  ),
-                );
-                _fetchUserData();
-              },
-            ),
+            _buildTopStat('assets/gem.png', rank),
           ],
         ),
       ),
       body: RefreshIndicator(
         onRefresh: _fetchUserData,
-        color: KeepUpApp.primaryYellow,
-        backgroundColor: Colors.white,
+        color: const Color(0xFF2D2D2D),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(24.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   GestureDetector(
-                    onTap: _showChatModal,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.orange.withOpacity(0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ChatScreen(),
                       ),
+                    ),
+                    child: Container(
+                      decoration: const BoxDecoration(shape: BoxShape.circle),
                       child: Image.asset(
                         'assets/fox.png',
                         width: 80,
                         height: 80,
-                        fit: BoxFit.contain,
                       ),
                     ),
                   ),
@@ -475,32 +381,16 @@ class _LandingPageState extends State<LandingPage> {
                           style: GoogleFonts.nunito(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2D2D2D),
                           ),
                         ),
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                username,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: GoogleFonts.nunito(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: KeepUpApp.primaryYellow,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: _showEditNameDialog,
-                              child: const Icon(
-                                Icons.edit,
-                                size: 18,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          username,
+                          style: GoogleFonts.nunito(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
                         ),
                       ],
                     ),
@@ -515,9 +405,9 @@ class _LandingPageState extends State<LandingPage> {
                       context,
                       title: "Daily Challenge",
                       subtitle: "3 Questions",
-                      bgColor: KeepUpApp.bgYellow,
-                      textColor: KeepUpApp.textColor,
-                      btnColor: KeepUpApp.primaryYellow,
+                      bgColor: const Color(0xFFFFF8B8),
+                      textColor: const Color(0xFF2D2D2D),
+                      btnColor: Colors.orange,
                       onTap: isLoadingQuiz ? null : _startQuiz,
                       isLoading: isLoadingQuiz,
                     ),
@@ -528,7 +418,7 @@ class _LandingPageState extends State<LandingPage> {
                       context,
                       title: "Catch me Up",
                       subtitle: "15 Minutes",
-                      bgColor: KeepUpApp.bgPurple,
+                      bgColor: const Color(0xFF2D2D2D),
                       textColor: Colors.white,
                       btnColor: Colors.white.withOpacity(0.2),
                       onTap: () => Navigator.push(
@@ -622,22 +512,16 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  Widget _buildTopStat(String imagePath, String value, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Image.asset(imagePath, width: 24, height: 24),
-          const SizedBox(width: 8),
-          Text(
-            value,
-            style: GoogleFonts.nunito(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+  Widget _buildTopStat(String imagePath, String value) {
+    return Row(
+      children: [
+        Image.asset(imagePath, width: 24, height: 24),
+        const SizedBox(width: 8),
+        Text(
+          value,
+          style: GoogleFonts.nunito(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
     );
   }
 
@@ -730,7 +614,7 @@ class _LandingPageState extends State<LandingPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         decoration: BoxDecoration(
-          color: KeepUpApp.bgYellow,
+          color: const Color(0xFFFFF8B8),
           borderRadius: BorderRadius.circular(25),
         ),
         child: Row(
@@ -741,12 +625,12 @@ class _LandingPageState extends State<LandingPage> {
               style: GoogleFonts.nunito(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: KeepUpApp.textColor,
+                color: const Color(0xFF2D2D2D),
               ),
             ),
             const Icon(
               Icons.arrow_forward_ios,
-              color: KeepUpApp.textColor,
+              color: Color(0xFF2D2D2D),
               size: 20,
             ),
           ],

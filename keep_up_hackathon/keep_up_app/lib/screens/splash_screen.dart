@@ -150,7 +150,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       scale: _stage >= 1 ? 1.3 : 0.5,
                       duration: const Duration(milliseconds: 800),
                       curve: Curves.elasticOut,
-                      child: Image.asset('assets/jumpfox.png', height: 220),
+                      child: Image.asset('assets/jumpfox.png', height: 320),
                     ),
                   ),
 
@@ -163,17 +163,9 @@ class _SplashScreenState extends State<SplashScreen> {
                     child: Column(
                       children: [
                         Text(
-                          "Promoted to",
+                          "Welcome back!",
                           style: GoogleFonts.nunito(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          "Bronze League!",
-                          style: GoogleFonts.nunito(
-                            fontSize: 32,
+                            fontSize: 40,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),

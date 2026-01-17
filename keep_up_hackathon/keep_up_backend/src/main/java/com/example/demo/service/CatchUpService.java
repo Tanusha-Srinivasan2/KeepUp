@@ -1,10 +1,12 @@
 package com.example.demo.service;
 
 import com.example.demo.model.Toon;
+import com.example.demo.repository.ToonRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
+import com.google.firebase.cloud.FirestoreClient;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -14,23 +16,22 @@ import java.util.concurrent.ExecutionException;
 @Service
 public class CatchUpService {
 
-    private final Firestore db;
-    private final NewsIndexingService newsIndexingService;
+    private final ToonRepository toonRepository;
     private final VertexAiService vertexAiService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public CatchUpService(Firestore db, NewsIndexingService newsIndexingService, VertexAiService vertexAiService) {
-        this.db = db;
-        this.newsIndexingService = newsIndexingService;
+    public CatchUpService(ToonRepository toonRepository, VertexAiService vertexAiService) {
+        this.toonRepository = toonRepository;
         this.vertexAiService = vertexAiService;
     }
 
     public List<Map<String, Object>> getWeeklyCatchUp(String region) throws Exception {
+        Firestore db = FirestoreClient.getFirestore();
 
         // 1. BACKFILL: Ensure summaries exist for last 3 days
         for (int i = 0; i < 3; i++) {
             String targetDate = LocalDate.now().minusDays(i).toString();
-            ensureSummaryExistsForDate(targetDate, region);
+            ensureSummaryExistsForDate(db, targetDate, region);
         }
 
         // 2. FETCH: Get summaries sorted by date desc
@@ -49,37 +50,40 @@ public class CatchUpService {
             String jsonContent = doc.getString("jsonContent");
             // Only add if content is valid
             if (jsonContent != null && !jsonContent.equals("[]")) {
-                Object summaryObj = objectMapper.readValue(jsonContent, List.class);
-                dayMap.put("summary", summaryObj);
-                responseList.add(dayMap);
+                try {
+                    Object summaryObj = objectMapper.readValue(jsonContent, List.class);
+                    dayMap.put("summary", summaryObj);
+                    responseList.add(dayMap);
+                } catch (Exception e) {
+                    System.err.println("Skipping invalid JSON for date: " + doc.getString("date"));
+                }
             }
         }
         return responseList;
     }
 
-    private void ensureSummaryExistsForDate(String date, String region) throws ExecutionException, InterruptedException {
+    private void ensureSummaryExistsForDate(Firestore db, String date, String region) throws ExecutionException, InterruptedException {
         String docId = "summary_" + date;
 
-        // Check if summary already exists
+        // Check if summary already exists to avoid re-generating (saving money)
         if (db.collection("daily_catchup").document(docId).get().get().exists()) {
             return;
         }
 
-        System.out.println("⚡ Generating Summary for: " + date);
+        System.out.println("⚡ Generating CatchUp Summary for: " + date);
 
-        // ✅ 1. STRICT FETCH: Only get news that matches this 'date' exactly
-        // (Make sure your NewsIndexingService.getAllNewsSegments accepts a date param!)
-        List<Toon> dailyNews = newsIndexingService.getAllNewsSegments(date);
+        // ✅ FIX: Convert Reactive Flux to Blocking List
+        List<Toon> dailyNews = toonRepository.findByPublishedDate(date).collectList().block();
 
-        if (dailyNews.isEmpty()) {
-            System.out.println("⚠️ No news found for " + date + ". Cannot generate summary.");
+        if (dailyNews == null || dailyNews.isEmpty()) {
+            System.out.println("⚠️ No news found for " + date + ". Skipping summary generation.");
             return;
         }
 
         // 2. Build Context for the AI
         StringBuilder contextBuilder = new StringBuilder();
         contextBuilder.append("EVENTS FOR DATE: ").append(date).append("\n");
-        contextBuilder.append("INSTRUCTIONS: Summarize ONLY these specific events.\n");
+        contextBuilder.append("INSTRUCTIONS: Summarize ONLY these specific events into a daily recap.\n");
 
         for (Toon t : dailyNews) {
             contextBuilder.append(String.format("- %s: %s\n", t.getTitle(), t.getDescription()));
@@ -97,8 +101,7 @@ public class CatchUpService {
             data.put("createdAt", System.currentTimeMillis());
 
             db.collection("daily_catchup").document(docId).set(data);
-            System.out.println("💾 Saved summary for " + date);
+            System.out.println("💾 Saved CatchUp summary for " + date);
         }
-
     }
 }

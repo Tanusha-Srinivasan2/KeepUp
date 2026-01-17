@@ -1,153 +1,97 @@
 package com.example.demo.controller;
 
-import com.example.demo.model.Toon;
-import com.example.demo.service.NewsIndexingService;
-import com.example.demo.service.QuizService;
+import com.example.demo.model.*;
+import com.example.demo.repository.*;
+import com.example.demo.service.CatchUpService;
 import com.example.demo.service.UserService;
 import com.example.demo.service.VertexAiService;
-import com.example.demo.service.CatchUpService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.util.Map;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/news")
+@CrossOrigin(origins = "*")
 public class NewsController {
 
     private final VertexAiService vertexAiService;
-    private final NewsIndexingService newsIndexingService;
-    private final QuizService quizService;
-
-    @Autowired
-    private UserService userService;
-
-    @Autowired
-    private CatchUpService catchUpService;
+    private final ToonRepository toonRepository;
+    private final LatestQuizRepository latestQuizRepository;
+    private final CategoryQuizRepository categoryQuizRepository;
+    private final CatchUpService catchUpService; // ✅ Correct Injection
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public NewsController(VertexAiService vertexAiService,
-                          NewsIndexingService newsIndexingService,
-                          QuizService quizService) {
+                          ToonRepository toonRepository,
+                          LatestQuizRepository latestQuizRepository,
+                          CategoryQuizRepository categoryQuizRepository,
+                          CatchUpService catchUpService) { // ✅ Add to Constructor
         this.vertexAiService = vertexAiService;
-        this.newsIndexingService = newsIndexingService;
-        this.quizService = quizService;
+        this.toonRepository = toonRepository;
+        this.latestQuizRepository = latestQuizRepository;
+        this.categoryQuizRepository = categoryQuizRepository;
+        this.catchUpService = catchUpService;
     }
 
-    // --- NEWS GENERATION ---
     @GetMapping("/generate")
-    public String generateNews(@RequestParam String region, @RequestParam(required = false) String date) {
-        String targetDate = (date != null && !date.isEmpty()) ? date : LocalDate.now().toString();
+    public String generateDailyNews(@RequestParam(defaultValue = "US") String region) {
+        try {
+            String today = LocalDate.now().toString();
 
-        System.out.println("1. Researching News for " + targetDate + "...");
-        String rawFacts = vertexAiService.researchNews(region, targetDate);
+            // 1. Generate & Save News
+            String rawFacts = vertexAiService.researchNews(region, today);
+            String jsonOutput = vertexAiService.formatToToonJson(rawFacts);
+            List<Toon> newToons = objectMapper.readValue(jsonOutput, new TypeReference<>() {});
 
-        System.out.println("2. Formatting Cards...");
-        String toonJson = vertexAiService.formatToToonJson(rawFacts);
-        newsIndexingService.processAndSave(toonJson, targetDate);
+            for (Toon t : newToons) {
+                t.setId(UUID.randomUUID().toString());
+                t.setPublishedDate(today);
+                t.setTimestamp(System.currentTimeMillis());
+            }
+            toonRepository.saveAll(newToons).blockLast();
 
-        System.out.println("3. Generating Main Daily Challenge...");
-        String mainQuizJson = vertexAiService.generateQuizFromNews(rawFacts);
-        quizService.saveDailyQuiz(mainQuizJson);
+            String newsContext = newToons.stream()
+                    .map(t -> t.getTitle() + ": " + t.getDescription())
+                    .collect(Collectors.joining("\n"));
 
-        System.out.println("4. Generating Category Quizzes...");
-        String categoryQuizJson = vertexAiService.generateCategoryWiseQuiz(rawFacts);
-        quizService.saveCategoryQuizzes(categoryQuizJson, targetDate);
+            // 2. Generate Daily Quiz
+            String quizJson = vertexAiService.generateQuizFromNews(newsContext);
+            latestQuizRepository.save(new LatestQuiz("latest_quiz", quizJson)).block();
 
-        return "Generation Complete for " + targetDate;
-    }
+            // 3. Generate Category Quizzes
+            List<String> categories = Arrays.asList("Technology", "Science", "Sports", "Business", "Politics");
+            for (String category : categories) {
+                try {
+                    String singleCatJson = vertexAiService.generateSingleCategoryQuiz(newsContext, category);
+                    List<QuizQuestion> questions = objectMapper.readValue(singleCatJson, new TypeReference<>() {});
+                    categoryQuizRepository.save(new CategoryQuiz(today + "_" + category, today, category, questions)).block();
+                } catch (Exception e) {
+                    System.err.println("⚠️ Quiz generation failed for " + category);
+                }
+            }
 
-    // --- QUIZ ENDPOINTS ---
+            // 4. ✅ Trigger Catch-Up Generation immediately
+            catchUpService.getWeeklyCatchUp(region);
 
-    // 1. Get Main Daily Challenge (Home Screen)
-    @GetMapping("/quiz")
-    public ResponseEntity<?> getQuiz(@RequestParam(required = false) String userId) throws ExecutionException, InterruptedException {
-        String quizJson = quizService.getDailyQuiz();
-        return ResponseEntity.ok(quizJson);
-    }
-
-    // 2. Get Specific Category Quiz (Explore Screen)
-    @GetMapping("/quiz/category")
-    public ResponseEntity<?> getCategoryQuiz(@RequestParam String category) throws ExecutionException, InterruptedException {
-        String today = LocalDate.now().toString();
-        List<Map<String, Object>> questions = quizService.getQuizByCategory(today, category);
-
-        if (questions.isEmpty()) {
-            return ResponseEntity.status(404).body("No quiz available for " + category);
+            return "Generation Complete for " + today;
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
         }
-        return ResponseEntity.ok(questions);
-    }
-
-    // --- ✅ USER & XP (UPDATED) ---
-    // This is the critical fix. It now accepts 'category' so the backend knows which quiz you finished.
-    @PostMapping("/user/xp")
-    public String addXp(
-            @RequestParam String userId,
-            @RequestParam int points,
-            @RequestParam String category // <--- Added parameter
-    ) throws Exception {
-        return userService.addXp(userId, points, category);
-    }
-
-    // --- FEED & CHAT ---
-    @GetMapping("/feed")
-    public List<Toon> getNewsFeed(@RequestParam(required = false) String date) {
-        return newsIndexingService.getAllNewsSegments(date);
-    }
-
-    @GetMapping("/chat")
-    public String chatWithNews(@RequestParam String question) {
-        String keywords = vertexAiService.extractSearchKeywords(question);
-        List<Toon> matches = newsIndexingService.searchNewsByKeywords(keywords);
-        List<String> matchStrings = matches.stream()
-                .map(t -> t.getTitle() + ": " + t.getDescription())
-                .collect(Collectors.toList());
-        return vertexAiService.chatWithSmartRouting(question, matchStrings);
-    }
-
-    // --- USER MANAGEMENT ---
-    @PostMapping("/user/create")
-    public String createUser(@RequestParam String userId, @RequestParam String name) {
-        return userService.createUser(userId, name);
-    }
-
-    @GetMapping("/user/{userId}")
-    public Map<String, Object> getUserProfile(@PathVariable String userId) throws Exception {
-        return userService.getUserProfile(userId);
-    }
-
-    @PostMapping("/user/updateName")
-    public String updateUserName(@RequestParam String userId, @RequestParam String newName) throws ExecutionException, InterruptedException {
-        return userService.updateUserName(userId, newName);
     }
 
     @GetMapping("/catchup")
-    public List<Map<String, Object>> getCatchUp() throws Exception {
-        return catchUpService.getWeeklyCatchUp("US");
+    public List<Map<String, Object>> getCatchUp(@RequestParam(defaultValue = "US") String region) throws Exception {
+        return catchUpService.getWeeklyCatchUp(region); // ✅ Instance call
     }
 
-    @GetMapping("/leaderboard")
-    public List<Map<String, Object>> getLeaderboard() throws ExecutionException, InterruptedException {
-        return userService.getGlobalLeaderboard();
-    }
-
-    // --- BOOKMARKS ---
-    @PostMapping("/user/{userId}/bookmark")
-    public String addBookmark(@PathVariable String userId, @RequestBody Toon newsItem) {
-        return userService.addBookmark(userId, newsItem);
-    }
-
-    @DeleteMapping("/user/{userId}/bookmark/{newsId}")
-    public String removeBookmark(@PathVariable String userId, @PathVariable String newsId) {
-        return userService.removeBookmark(userId, newsId);
-    }
-
-    @GetMapping("/user/{userId}/bookmarks")
-    public List<Toon> getUserBookmarks(@PathVariable String userId) throws Exception {
-        return userService.getBookmarks(userId);
+    @GetMapping("/feed")
+    public List<Toon> getNewsFeed(@RequestParam(required = false) String date) {
+        if (date == null) date = LocalDate.now().toString();
+        List<Toon> news = toonRepository.findByPublishedDate(date).collectList().block();
+        return (news != null && !news.isEmpty()) ? news : toonRepository.findAll().collectList().block();
     }
 }

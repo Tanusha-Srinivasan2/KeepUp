@@ -3,9 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+
 import '../main.dart';
 import 'landing_page.dart';
-import 'splash_screen.dart'; // ✅ 1. ADD THIS IMPORT
+import 'splash_screen.dart'; // ✅ Ensures smooth transition
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -31,26 +32,33 @@ class _AuthScreenState extends State<AuthScreen> {
       }
 
       // 2. Extract Details
-      String userId = googleUser.email;
+      // ✅ Use 'id' for a unique, stable User ID (Best Practice)
+      String userId = googleUser.id;
+      // ✅ Use 'displayName' to get the actual name from Google
       String name = googleUser.displayName ?? "Reader";
 
       // 3. Register User in Backend
-      final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
-      );
-      await http.post(url);
+      // Note: We use try/catch inside here specifically for the HTTP call
+      // so even if the backend is down, the user can still log in locally.
+      try {
+        final url = Uri.parse(
+          'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
+        );
+        await http.post(url);
+      } catch (e) {
+        print("Backend sync failed (User can still login locally): $e");
+      }
 
       // 4. Save Session Locally
+      // This is CRITICAL for the Landing Page to show the correct name
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_id', userId);
       await prefs.setString('user_name', name);
 
-      // 5. Navigate to CELEBRATION (Splash) instead of Home
+      // 5. Navigate to Splash (Celebration) Screen
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          // ✅ 2. CHANGE THIS LINE:
-          // Was: MaterialPageRoute(builder: (context) => const LandingPage()),
           MaterialPageRoute(builder: (context) => const SplashScreen()),
         );
       }
@@ -66,7 +74,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (The rest of your build method stays exactly the same) ...
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5),
       body: SafeArea(
@@ -76,6 +83,7 @@ class _AuthScreenState extends State<AuthScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(),
+              // Logo
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -90,6 +98,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Image.asset('assets/fox.png', width: 150),
               ),
               const SizedBox(height: 40),
+
+              // App Name
               Text(
                 "Keep Up",
                 style: GoogleFonts.poppins(
@@ -99,6 +109,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+
+              // Tagline
               Text(
                 "Stay smart. Stay ahead.\nYour daily news companion.",
                 textAlign: TextAlign.center,
@@ -108,6 +120,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
               const Spacer(),
+
+              // Google Sign-In Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -126,6 +140,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            // You can add a Google G logo asset here if you have one
+                            // Image.asset('assets/google_logo.png', height: 24),
                             const Icon(Icons.login, color: Colors.orange),
                             const SizedBox(width: 10),
                             Text(

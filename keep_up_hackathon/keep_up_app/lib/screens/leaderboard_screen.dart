@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../main.dart'; // For KeepUpApp colors
+import '../main.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -17,6 +17,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   bool isLoading = true;
   String? currentUserId;
 
+  // Use 10.0.2.2 for Android Emulator, localhost for iOS
+  final String baseUrl = "http://10.0.2.2:8080";
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +31,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     currentUserId = prefs.getString('user_id');
 
     try {
-      final url = Uri.parse('http://10.0.2.2:8080/api/news/leaderboard');
+      // ✅ UPDATED URL: Points to User Controller
+      final url = Uri.parse('$baseUrl/api/news/user/leaderboard');
+
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -38,6 +43,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             isLoading = false;
           });
         }
+      } else {
+        print("Failed to load leaderboard: ${response.statusCode}");
+        if (mounted) setState(() => isLoading = false);
       }
     } catch (e) {
       print("Error fetching leaderboard: $e");
@@ -48,7 +56,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFEFCE0), // Cream background
+      backgroundColor: const Color(0xFFFEFCE0),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -69,10 +77,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       body: Column(
         children: [
           _buildLeagueHeader(),
-
           const SizedBox(height: 15),
-
-          // LIST SECTION
           Expanded(
             child: isLoading
                 ? const Center(
@@ -81,7 +86,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 : Container(
                     width: double.infinity,
                     decoration: const BoxDecoration(
-                      // ✅ UPDATED: Matches Cream Background
                       color: Color(0xFFFEFCE0),
                       borderRadius: BorderRadius.vertical(
                         top: Radius.circular(40),
@@ -97,11 +101,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           horizontal: 24,
                         ),
                         itemCount: leaderboardData.length,
-                        // ✅ UPDATED: Divider between every user
                         separatorBuilder: (context, index) => Divider(
                           color: Colors.grey.withOpacity(0.3),
                           thickness: 1,
-                          height: 24, // Adds spacing around the line
+                          height: 24,
                         ),
                         itemBuilder: (context, index) {
                           final user = leaderboardData[index];
@@ -149,26 +152,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             color: const Color(0xFF2D2D2D),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          "Next Tournament in 5 hrs",
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: Colors.grey[500],
-            fontWeight: FontWeight.w500,
-          ),
-        ),
       ],
     );
   }
 
   Widget _buildUserRow(Map<String, dynamic> user, int rank) {
-    bool isMe = user['userId'] == currentUserId;
+    String uId = (user['userId'] ?? '').toString();
+    bool isMe = uId == currentUserId;
     String name = isMe ? "You" : (user['name'] ?? "Unknown");
-    int xp = user['xp'] ?? 0;
+    int xp = int.tryParse(user['xp']?.toString() ?? '0') ?? 0;
+    int streak = int.tryParse(user['streak']?.toString() ?? '0') ?? 0;
 
-    // AESTHETIC HIGHLIGHT
-    // ✅ "You" gets a slightly darker cream/yellow tint to stand out subtly
     Color bgColor = isMe ? const Color(0xFFFFF9C4) : Colors.transparent;
     Color nameColor = isMe ? Colors.orange[800]! : const Color(0xFF2D2D2D);
     FontWeight fontWeight = isMe ? FontWeight.bold : FontWeight.w600;
@@ -181,12 +175,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       child: Row(
         children: [
-          // 1. RANK
           SizedBox(width: 40, child: Center(child: _buildRankDisplay(rank))),
-
           const SizedBox(width: 15),
-
-          // 2. NAME
           Expanded(
             child: Text(
               name,
@@ -197,8 +187,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ),
           ),
-
-          // 3. XP SCORE
+          if (streak > 0) ...[
+            Image.asset('assets/fire.png', width: 18, height: 18),
+            const SizedBox(width: 4),
+            Text(
+              "$streak",
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange[800],
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Text(
             "$xp XP",
             style: GoogleFonts.poppins(
@@ -213,33 +214,31 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _buildRankDisplay(int rank) {
-    if (rank == 1) {
+    if (rank == 1)
       return const Icon(
         Icons.emoji_events_rounded,
         color: Color(0xFFFFD700),
         size: 28,
-      ); // Gold
-    } else if (rank == 2) {
+      );
+    if (rank == 2)
       return const Icon(
         Icons.emoji_events_rounded,
         color: Color(0xFFC0C0C0),
         size: 28,
-      ); // Silver
-    } else if (rank == 3) {
+      );
+    if (rank == 3)
       return const Icon(
         Icons.emoji_events_rounded,
         color: Color(0xFFCD7F32),
         size: 28,
-      ); // Bronze
-    } else {
-      return Text(
-        rank.toString(),
-        style: GoogleFonts.poppins(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: const Color(0xFF2D2D2D),
-        ),
       );
-    }
+    return Text(
+      rank.toString(),
+      style: GoogleFonts.poppins(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: const Color(0xFF2D2D2D),
+      ),
+    );
   }
 }

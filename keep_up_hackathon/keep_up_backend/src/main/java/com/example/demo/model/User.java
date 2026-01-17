@@ -1,35 +1,46 @@
 package com.example.demo.model;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class User {
     private String userId;
-    private String username;
+    private String name;
     private int xp;
     private String league; // "Bronze", "Silver", "Gold"
-    private String cohortId;
 
-    // ✅ NEW: Tracks when they last earned points for EACH category
-    // Key = Category Name (e.g., "Daily", "Technology"), Value = Date (e.g., "2026-01-06")
+    // ✅ Streak Tracking
+    private int streak;
+    private String lastActiveDate;
+
+    // ✅ Cooldown Tracking
     private Map<String, String> lastPlayed;
+
+    // ✅ NEW: Bookmarks List
+    // Stores a list of news items (each item is a Map of title, topic, url, etc.)
+    private List<Map<String, Object>> bookmarks;
 
     public User() {} // Required for Firestore
 
-    public User(String userId, String username) {
+    public User(String userId, String name) {
         this.userId = userId;
-        this.username = username;
+        this.name = name;
         this.xp = 0;
         this.league = "Bronze";
-        this.lastPlayed = new HashMap<>(); // Initialize empty map
+        this.streak = 1;
+        this.lastPlayed = new HashMap<>();
+        this.lastActiveDate = java.time.LocalDate.now().toString();
+        this.bookmarks = new ArrayList<>(); // Initialize empty list
     }
 
-    // Getters and Setters
+    // --- Getters and Setters ---
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public int getXp() { return xp; }
     public void setXp(int xp) { this.xp = xp; }
@@ -37,10 +48,24 @@ public class User {
     public String getLeague() { return league; }
     public void setLeague(String league) { this.league = league; }
 
-    public String getCohortId() { return cohortId; }
-    public void setCohortId(String cohortId) { this.cohortId = cohortId; }
+    public int getStreak() { return streak; }
+    public void setStreak(int streak) { this.streak = streak; }
 
-    // ✅ Getter/Setter for Map
+    public String getLastActiveDate() { return lastActiveDate; }
+    public void setLastActiveDate(String lastActiveDate) { this.lastActiveDate = lastActiveDate; }
+
     public Map<String, String> getLastPlayed() { return lastPlayed; }
     public void setLastPlayed(Map<String, String> lastPlayed) { this.lastPlayed = lastPlayed; }
+
+    // ✅ New Getter/Setter for Bookmarks
+    public List<Map<String, Object>> getBookmarks() {
+        if (bookmarks == null) {
+            return new ArrayList<>();
+        }
+        return bookmarks;
+    }
+
+    public void setBookmarks(List<Map<String, Object>> bookmarks) {
+        this.bookmarks = bookmarks;
+    }
 }

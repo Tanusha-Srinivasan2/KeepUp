@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_core/firebase_core.dart'; // ✅ Import Firebase
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // ✅ 1. Import AdMob
 
 // Screens
 import 'screens/splash_screen.dart';
-import 'screens/auth_screen.dart'; // Make sure this file exists from previous step!
+import 'screens/auth_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ Initialize Firebase
-  // If you haven't generated firebase_options.dart, make sure google-services.json is in android/app/
   await Firebase.initializeApp();
+
+  // ✅ 2. Initialize AdMob (CRITICAL FIX for MissingPluginException)
+  await MobileAds.instance.initialize();
 
   runApp(const KeepUpApp());
 }
@@ -93,7 +96,7 @@ class _KeepUpAppState extends State<KeepUpApp> {
           iconTheme: IconThemeData(color: KeepUpApp.textColor),
         ),
       ),
-      // ✅ Routing Logic: Login vs Home
+      // ✅ Routing Logic: Login vs Home (via Splash)
       home: _isLoggedIn ? const SplashScreen() : const AuthScreen(),
     );
   }
