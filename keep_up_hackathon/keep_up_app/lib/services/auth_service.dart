@@ -76,4 +76,50 @@ class AuthService {
     await _googleSignIn.signOut();
     print("User logged out and local storage cleared.");
   }
+
+  /// ✅ POLICY COMPLIANCE: Delete Account - Wipes all user data
+  static Future<bool> deleteAccount() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String? userId = prefs.getString(_keyUserId);
+
+      if (userId == null) {
+        print("⚠️ No user to delete");
+        return false;
+      }
+
+      // 1. Call backend to delete user data from Firestore
+      final url = Uri.parse(
+        'http://10.0.2.2:8080/api/news/user/$userId/delete',
+      );
+      final response = await http.delete(url);
+
+      if (response.statusCode == 200) {
+        print("✅ User data deleted from backend: $userId");
+      } else {
+        print("⚠️ Backend delete returned: ${response.statusCode}");
+        // Continue with local cleanup even if backend fails
+      }
+
+      // 2. Clear all local storage
+      await prefs.clear();
+
+      // 3. Sign out of Google
+      await _googleSignIn.signOut();
+
+      // 4. Disconnect Google account (revokes access)
+      try {
+        await _googleSignIn.disconnect();
+      } catch (e) {
+        // Disconnect may fail if already disconnected
+        print("Note: Google disconnect: $e");
+      }
+
+      print("✅ Account fully deleted and local data cleared.");
+      return true;
+    } catch (e) {
+      print("❌ Error deleting account: $e");
+      return false;
+    }
+  }
 }

@@ -9,7 +9,9 @@ import java.util.List;
 public class Toon {
 
     @DocumentId
-    private String id;
+    private String documentId;  // Firestore document ID (auto-populated)
+
+    private String id;  // Stored field in document data
 
     private String topic;
     private String title;
@@ -18,12 +20,16 @@ public class Toon {
     private String time;
     private List<String> keywords;
     private String sourceUrl;
+    private String sourceName;  // 📰 Publisher name for source attribution display
+    private String disclaimer;  // 🏥 Medical/informational disclaimer
     private String publishedDate;
     private long timestamp;
 
     public Toon() {} // Required for Firestore
 
     // --- Getters and Setters ---
+    public String getDocumentId() { return documentId; }
+    public void setDocumentId(String documentId) { this.documentId = documentId; }
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTopic() { return topic; }
@@ -40,6 +46,10 @@ public class Toon {
     public void setKeywords(List<String> keywords) { this.keywords = keywords; }
     public String getSourceUrl() { return sourceUrl; }
     public void setSourceUrl(String sourceUrl) { this.sourceUrl = sourceUrl; }
+    public String getSourceName() { return sourceName; }
+    public void setSourceName(String sourceName) { this.sourceName = sourceName; }
+    public String getDisclaimer() { return disclaimer; }
+    public void setDisclaimer(String disclaimer) { this.disclaimer = disclaimer; }
     public String getPublishedDate() { return publishedDate; }
     public void setPublishedDate(String publishedDate) { this.publishedDate = publishedDate; }
     public long getTimestamp() { return timestamp; }

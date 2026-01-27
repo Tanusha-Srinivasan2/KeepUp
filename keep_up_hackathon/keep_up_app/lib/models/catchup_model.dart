@@ -3,12 +3,16 @@ class CatchUpItem {
   final String headline;
   final String summary;
   final String date;
+  final String sourceUrl; // 📰 New: Link to original article
+  final String sourceName; // 📰 New: Publisher name for display
 
   CatchUpItem({
     required this.topic,
     required this.headline,
     required this.summary,
     required this.date,
+    this.sourceUrl = '',
+    this.sourceName = '',
   });
 
   factory CatchUpItem.fromJson(Map<String, dynamic> json) {
@@ -49,12 +53,32 @@ class CatchUpItem {
       formattedDate = "{$month ${date.day}}";
     }
 
+    // 3. 📰 Source Attribution
+    String sourceUrl = json['sourceUrl'] ?? '';
+    String sourceName = json['sourceName'] ?? '';
+
+    // Try to extract source name from URL if not provided
+    if (sourceName.isEmpty && sourceUrl.isNotEmpty) {
+      try {
+        Uri uri = Uri.parse(sourceUrl);
+        String host = uri.host.replaceAll('www.', '');
+        if (host.contains('.')) {
+          sourceName = host.split('.').first;
+          sourceName = sourceName[0].toUpperCase() + sourceName.substring(1);
+        }
+      } catch (e) {
+        sourceName = 'News Source';
+      }
+    }
+
     return CatchUpItem(
       topic: topic,
       headline: headline,
       summary:
           json['description'] ?? json['summary'] ?? 'No details available.',
       date: formattedDate,
+      sourceUrl: sourceUrl,
+      sourceName: sourceName,
     );
   }
 }

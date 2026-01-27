@@ -8,6 +8,7 @@ import java.util.Map;
 public class User {
     private String userId;
     private String name;
+    private String email;  // ✅ User email for identification
     private int xp;
     private String league; // "Bronze", "Silver", "Gold"
 
@@ -42,6 +43,9 @@ public class User {
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
     public int getXp() { return xp; }
     public void setXp(int xp) { this.xp = xp; }
 
@@ -68,4 +72,10 @@ public class User {
     public void setBookmarks(List<Map<String, Object>> bookmarks) {
         this.bookmarks = bookmarks;
     }
+
+    // ✅ Premium Subscription Status
+    private boolean isPremium;
+
+    public boolean isPremium() { return isPremium; }
+    public void setPremium(boolean isPremium) { this.isPremium = isPremium; }
 }

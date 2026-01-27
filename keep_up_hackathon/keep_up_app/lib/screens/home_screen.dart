@@ -25,8 +25,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<NewsCard> cards = [];
   bool isLoading = true;
-
-  // ✅ Tracks which IDs are bookmarked
   final Set<String> _savedCardIds = {};
 
   final List<String> _categories = [
@@ -42,52 +40,110 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedCategoryIndex = 0;
   DateTime? _selectedDate;
 
-  // Use 10.0.2.2 for Android Emulator, localhost for iOS
+  // ✅ API Base URL
   final String baseUrl = "http://10.0.2.2:8080";
-
-  // ✅ HELPER: Maps Topics to Local Images
-  String _getAssetImage(String topic) {
-    String t = topic.toLowerCase();
-    if (t.contains('tech')) return 'assets/technology.png';
-    if (t.contains('sport')) return 'assets/sports.png';
-    if (t.contains('politic')) return 'assets/politics.png';
-    if (t.contains('business') || t.contains('finance')) {
-      return 'assets/business.png';
-    }
-    if (t.contains('science')) return 'assets/science.png';
-    if (t.contains('health')) return 'assets/health.png';
-    if (t.contains('entertainment') || t.contains('movie')) {
-      return 'assets/entertainment.png';
-    }
-    return 'assets/general.png';
-  }
 
   @override
   void initState() {
     super.initState();
     _handleInitialFilter();
-    _fetchUserBookmarks(); // ✅ Load saved bookmarks on startup
+    _fetchUserBookmarks();
   }
 
-  // --- 1. FETCH BOOKMARKS ON LOAD ---
+  // --- 1. REPORT API LOGIC ---
+  Future<void> _submitReport(String contentId, String title) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? userId = prefs.getString('user_id') ?? "guest_user";
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/news/report'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "userId": userId,
+          "contentId": contentId,
+          "reportedText": title,
+          "reason": "Flagged from Home Feed",
+        }),
+      );
+      if (response.statusCode == 200) {
+        print("Report submitted for $contentId");
+      }
+    } catch (e) {
+      print("Error reporting: $e");
+    }
+  }
+
+  void _showReportDialog(BuildContext context, NewsCard card) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          "Report Content",
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "Flag this content as inappropriate? We will review it.",
+          style: GoogleFonts.poppins(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              "Cancel",
+              style: GoogleFonts.poppins(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _submitReport(card.id, card.title); // Send to Backend
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Thanks for reporting. We will investigate."),
+                ),
+              );
+            },
+            child: Text(
+              "Report",
+              style: GoogleFonts.poppins(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- 2. EXISTING HELPERS ---
+  String _getAssetImage(String topic) {
+    String t = topic.toLowerCase();
+    if (t.contains('tech')) return 'assets/technology.png';
+    if (t.contains('sport')) return 'assets/sports.png';
+    if (t.contains('politic')) return 'assets/politics.png';
+    if (t.contains('business') || t.contains('finance'))
+      return 'assets/business.png';
+    if (t.contains('science')) return 'assets/science.png';
+    if (t.contains('health')) return 'assets/health.png';
+    if (t.contains('entertainment') || t.contains('movie'))
+      return 'assets/entertainment.png';
+    return 'assets/general.png';
+  }
+
   Future<void> _fetchUserBookmarks() async {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
     if (userId == null) return;
-
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/api/news/user/$userId/bookmarks'),
       );
-
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         setState(() {
           _savedCardIds.clear();
           for (var item in data) {
-            if (item is Map && item.containsKey('id')) {
+            if (item is Map && item.containsKey('id'))
               _savedCardIds.add(item['id']);
-            }
           }
         });
       }
@@ -96,31 +152,25 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- 2. TOGGLE BOOKMARK (Add or Remove) ---
   Future<void> _toggleBookmark(NewsCard card) async {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
     if (userId == null) return;
 
     bool isCurrentlySaved = _savedCardIds.contains(card.id);
-
-    // Optimistic Update
     setState(() {
-      if (isCurrentlySaved) {
+      if (isCurrentlySaved)
         _savedCardIds.remove(card.id);
-      } else {
+      else
         _savedCardIds.add(card.id);
-      }
     });
 
     try {
       if (isCurrentlySaved) {
-        // REMOVE
         await http.delete(
           Uri.parse('$baseUrl/api/news/user/$userId/bookmark/${card.id}'),
         );
       } else {
-        // ADD
         await http.post(
           Uri.parse('$baseUrl/api/news/user/$userId/bookmark'),
           headers: {"Content-Type": "application/json"},
@@ -137,14 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print("Error toggling bookmark: $e");
-      // Revert if failed
-      setState(() {
-        if (isCurrentlySaved) {
-          _savedCardIds.add(card.id);
-        } else {
-          _savedCardIds.remove(card.id);
-        }
-      });
     }
   }
 
@@ -154,9 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
         (element) =>
             element.toLowerCase() == widget.categoryFilter!.toLowerCase(),
       );
-      if (passedIndex != -1) {
-        _selectedCategoryIndex = passedIndex;
-      }
+      if (passedIndex != -1) _selectedCategoryIndex = passedIndex;
     }
     fetchNews(_categories[_selectedCategoryIndex]);
   }
@@ -176,7 +216,6 @@ class _HomeScreenState extends State<HomeScreen> {
         List<NewsCard> allCards = data
             .map((json) => NewsCard.fromJson(json))
             .toList();
-
         if (category != "All") {
           allCards = allCards
               .where(
@@ -184,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
               )
               .toList();
         }
-
         setState(() {
           cards = allCards;
           isLoading = false;
@@ -284,11 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const Color(0xFFBBF7D0),
     ];
     final cardColor = cardColors[index % cardColors.length];
-
-    // Check if THIS specific card is in our saved set
     bool isSaved = _savedCardIds.contains(card.id);
-
-    // Topic display cleanup
     String displayTopic = card.topic.contains(',')
         ? card.topic.split(',')[0].trim()
         : card.topic;
@@ -315,7 +349,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // IMAGE SECTION
             Expanded(
               flex: 5,
               child: Container(
@@ -331,7 +364,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Stack(
                   children: [
-                    // Gradient Overlay
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
@@ -346,7 +378,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    // Topic Badge
                     Positioned(
                       top: 20,
                       left: 20,
@@ -369,12 +400,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
+                    // ✅ AI-GENERATED BADGE (Policy Compliance)
+                    Positioned(
+                      top: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.auto_awesome,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "AI-Generated",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-
-            // TEXT CONTENT
             Expanded(
               flex: 4,
               child: Padding(
@@ -396,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     Text(
                       card.description,
-                      maxLines: 4,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
@@ -404,17 +467,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 1.5,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    // ✅ SOURCE ATTRIBUTION (Policy Compliance)
+                    if (card.sourceName.isNotEmpty)
+                      Text(
+                        "Source: ${card.sourceName}",
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                   ],
                 ),
               ),
             ),
-
-            // ✅ FOOTER: Bookmark moved to Left, Time Removed
+            // ✅ UPDATED FOOTER
             Padding(
               padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
               child: Row(
                 children: [
-                  // --- BOOKMARK BUTTON (Left Side) ---
                   GestureDetector(
                     onTap: () => _toggleBookmark(card),
                     child: Row(
@@ -438,13 +510,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-
-                  const Spacer(), // Pushes the smiley to the right
-                  // --- SMILEY (Right Side) ---
-                  const Icon(
-                    Icons.sentiment_satisfied_alt,
-                    size: 24,
-                    color: Color(0xFF4B5563),
+                  const Spacer(),
+                  // ✅ COMPLIANCE: REPORT BUTTON ADDED
+                  GestureDetector(
+                    onTap: () => _showReportDialog(context, card),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.flag_outlined,
+                          size: 22,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Report",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -455,6 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- NAVIGATION HELPERS ---
   Widget _buildBottomNavBar() {
     return Container(
       height: 90,
@@ -469,37 +556,31 @@ class _HomeScreenState extends State<HomeScreen> {
             Icons.home_outlined,
             "Home",
             false,
-            onTap: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const LandingPage()),
-                (route) => false,
-              );
-            },
+            onTap: () => Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const LandingPage()),
+              (route) => false,
+            ),
           ),
           _navItem(
             Icons.explore,
             "Explore",
             true,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CategoryScreen()),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CategoryScreen()),
+            ),
           ),
           _navItem(
             Icons.leaderboard_outlined,
             "Rank",
             false,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LeaderboardScreen(),
-                ),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LeaderboardScreen(),
+              ),
+            ),
           ),
         ],
       ),

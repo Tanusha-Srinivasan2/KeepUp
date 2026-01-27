@@ -8,6 +8,9 @@ buildscript {
         // This must be inside 'buildscript' -> 'dependencies'
         // Note the Kotlin syntax: parentheses () and double quotes ""
         classpath("com.google.gms:google-services:4.4.2")
+        
+        // ✅ Firebase Crashlytics (Play Store Ranking Optimization)
+        classpath("com.google.firebase:firebase-crashlytics-gradle:2.9.9")
     }
 }
 

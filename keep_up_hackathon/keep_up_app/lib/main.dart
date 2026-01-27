@@ -3,10 +3,29 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // ✅ 1. Import AdMob
+import 'package:workmanager/workmanager.dart'; // ✅ 4. Import WorkManager
+import 'package:firebase_crashlytics/firebase_crashlytics.dart'; // ✅ 6. Crashlytics
+
+// Services
+import 'services/background_sync_service.dart';
 
 // Screens
 import 'screens/splash_screen.dart';
 import 'screens/auth_screen.dart';
+
+/// ✅ POLICY COMPLIANCE: WorkManager callback dispatcher for background tasks
+/// This runs in a separate isolate, so no access to Flutter widgets
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    switch (task) {
+      case BackgroundSyncService.taskName:
+        await BackgroundSyncService.syncNews();
+        break;
+    }
+    return Future.value(true);
+  });
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,8 +33,36 @@ void main() async {
   // ✅ Initialize Firebase
   await Firebase.initializeApp();
 
+  // ✅ 6. Initialize Crashlytics (Play Store Ranking - keep crash rate under 1.09%)
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
   // ✅ 2. Initialize AdMob (CRITICAL FIX for MissingPluginException)
   await MobileAds.instance.initialize();
+
+  // ✅ 3. Configure AdMob for policy compliance
+  // - maxAdContentRating: PG for age-appropriate ads (use 'g' for kids apps)
+  // - tagForChildDirectedTreatment: 'no' for 13+ audience
+  await MobileAds.instance.updateRequestConfiguration(
+    RequestConfiguration(
+      maxAdContentRating: MaxAdContentRating.pg,
+      tagForChildDirectedTreatment: TagForChildDirectedTreatment.no,
+    ),
+  );
+
+  // ✅ 4. Initialize WorkManager for background sync (Policy Compliance)
+  // Uses WorkManager instead of ForegroundService per Google Play policies
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+
+  // ✅ 5. Register periodic task for daily news sync
+  await Workmanager().registerPeriodicTask(
+    'dailyNewsSyncTask',
+    BackgroundSyncService.taskName,
+    frequency: const Duration(hours: 24),
+    constraints: Constraints(
+      networkType: NetworkType.connected,
+      requiresBatteryNotLow: true,
+    ),
+  );
 
   runApp(const KeepUpApp());
 }

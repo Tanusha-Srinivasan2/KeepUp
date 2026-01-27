@@ -44,12 +44,24 @@ public class UserService {
         }
     }
 
-    // --- 2. CREATE USER ---
+    // --- 2. CREATE USER (only if doesn't exist) ---
     public String createUser(String userId, String name) {
-        Firestore db = FirestoreClient.getFirestore();
-        User newUser = new User(userId, name);
-        db.collection("users").document(userId).set(newUser);
-        return "User Created: " + name;
+        try {
+            Firestore db = FirestoreClient.getFirestore();
+            DocumentSnapshot existingUser = db.collection("users").document(userId).get().get();
+            
+            if (existingUser.exists()) {
+                // User already exists - don't overwrite their data!
+                return "User already exists: " + name;
+            }
+            
+            // Only create if user doesn't exist
+            User newUser = new User(userId, name);
+            db.collection("users").document(userId).set(newUser);
+            return "User Created: " + name;
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
+        }
     }
 
     // --- 3. ADD XP & UPDATE STREAK ---
@@ -88,6 +100,52 @@ public class UserService {
 
                 userRef.set(user);
                 return "XP and Streak updated. Current Streak: " + user.getStreak();
+            }
+        }
+        return "User not found.";
+    }
+
+    // --- 3.5 RESTORE STREAK (Ad Recovery) ---
+    public String restoreStreak(String userId) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
+
+        if (userSnap.exists()) {
+            User user = userSnap.toObject(User.class);
+            if (user != null) {
+                LocalDate today = LocalDate.now();
+                LocalDate yesterday = today.minusDays(1);
+                
+                // Check if streak was actually broken (lastActiveDate is before yesterday)
+                if (user.getLastActiveDate() != null) {
+                    LocalDate lastActive = LocalDate.parse(user.getLastActiveDate());
+                    long daysMissed = ChronoUnit.DAYS.between(lastActive, today);
+                    
+                    // Only restore if they missed 1-2 days (reasonable grace period)
+                    if (daysMissed >= 2 && daysMissed <= 3) {
+                        // Restore the streak by setting lastActiveDate to yesterday
+                        // This way, when they play today, their streak will increment normally
+                        user.setLastActiveDate(yesterday.toString());
+                        // Keep their current streak value (don't reset it)
+                        userRef.set(user);
+                        return "Streak restored! Current streak: " + user.getStreak() + ". Play now to continue!";
+                    } else if (daysMissed > 3) {
+                        // Too many days missed, but still give them a streak of 1
+                        user.setStreak(1);
+                        user.setLastActiveDate(yesterday.toString());
+                        userRef.set(user);
+                        return "Streak reset to 1. Play now to start building again!";
+                    } else {
+                        return "Streak is not broken! Current streak: " + user.getStreak();
+                    }
+                } else {
+                    // No lastActiveDate, set to yesterday
+                    user.setLastActiveDate(yesterday.toString());
+                    user.setStreak(1);
+                    userRef.set(user);
+                    return "Streak initialized! Play now to start your streak.";
+                }
             }
         }
         return "User not found.";
@@ -177,5 +235,36 @@ public class UserService {
             }
         }
         return "User not found or bookmark doesn't exist.";
+    }
+
+    // --- ✅ POLICY COMPLIANCE: DELETE USER ACCOUNT ---
+    // Permanently removes all user data from Firestore for GDPR/Google Play compliance
+    public String deleteUser(String userId) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        DocumentReference userRef = db.collection("users").document(userId);
+        DocumentSnapshot userSnap = userRef.get().get();
+
+        if (userSnap.exists()) {
+            // Delete the user document
+            userRef.delete().get();
+            return "User account and all data deleted successfully.";
+        }
+        return "User not found.";
+    }
+
+    // --- ✅ WEB DELETION REQUEST (Email-based) ---
+    // For users who want to delete without the app
+    public String requestDeletionByEmail(String email) throws ExecutionException, InterruptedException {
+        Firestore db = FirestoreClient.getFirestore();
+        
+        // Search for user by email (userId is the email in this app)
+        DocumentSnapshot userSnap = db.collection("users").document(email).get().get();
+        
+        if (userSnap.exists()) {
+            // Delete the user
+            db.collection("users").document(email).delete().get();
+            return "Account deleted successfully. All your data has been removed.";
+        }
+        return "No account found with this email address.";
     }
 }

@@ -184,4 +184,49 @@ public class UserController {
 
     }
 
+    // --- ✅ RESTORE STREAK (Ad Recovery) ---
+
+    @PostMapping("/{userId}/restore-streak")
+
+    public String restoreStreak(@PathVariable String userId) {
+
+        try {
+
+            return userService.restoreStreak(userId);
+
+        } catch (Exception e) {
+
+            return "Error restoring streak: " + e.getMessage();
+
+        }
+
+    }
+
+    // --- ✅ POLICY COMPLIANCE: DELETE ACCOUNT (In-App) ---
+    @DeleteMapping("/{userId}/delete")
+    public String deleteAccount(@PathVariable String userId) {
+        try {
+            return userService.deleteUser(userId);
+        } catch (Exception e) {
+            return "Error deleting account: " + e.getMessage();
+        }
+    }
+
+    // --- ✅ POLICY COMPLIANCE: WEB DELETION REQUEST ---
+    // For users who want to delete without the app
+    @PostMapping("/request-deletion")
+    public Map<String, Object> requestDeletion(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            if (email == null || email.isEmpty()) {
+                return Map.of("success", false, "message", "Email is required");
+            }
+            String result = userService.requestDeletionByEmail(email);
+            boolean success = result.contains("successfully");
+            return Map.of("success", success, "message", result);
+        } catch (Exception e) {
+            return Map.of("success", false, "message", "Error: " + e.getMessage());
+        }
+    }
+
 }

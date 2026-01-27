@@ -30,6 +30,18 @@ dependencies:
   # ✅ Hardware & Utilities
   url_launcher: ^6.3.2
   google_mobile_ads: ^5.1.0
+  
+  # ✅ Background Sync (Policy Compliance - replaces ForegroundService)
+  workmanager: ^0.6.0
+
+  # ✅ In-App Purchases (Google Play Billing - Policy Compliance)
+  in_app_purchase: ^3.1.13
+
+  # ✅ Crash Reporting (Play Store Ranking - keep crash rate under 1.09%)
+  firebase_crashlytics: ^3.4.8
+
+  # ✅ In-App Review (Prompt users when happy - after quiz success)
+  in_app_review: ^2.0.8
 
 dev_dependencies:
   flutter_test:
@@ -58,6 +70,7 @@ flutter:
     - assets/lightning.png
     - assets/jumpfox.png
     - assets/splash_pattern.png
+    - assets/legal/
 
 # 👇 Configuration Block (Must match your file name exactly!)
 flutter_launcher_icons:

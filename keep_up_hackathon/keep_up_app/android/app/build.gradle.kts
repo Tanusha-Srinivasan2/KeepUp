@@ -6,6 +6,9 @@ plugins {
     
     // ✅ CORRECTED SYNTAX (Kotlin DSL requires parentheses and double quotes)
     id("com.google.gms.google-services") 
+    
+    // ✅ Firebase Crashlytics (Play Store Ranking Optimization)
+    id("com.google.firebase.crashlytics")
 }
 
 android {
@@ -28,7 +31,7 @@ android {
         
         // You can update the following values to match your application needs.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

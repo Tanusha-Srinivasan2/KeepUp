@@ -3,11 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:google_sign_in/google_sign_in.dart';
+
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import '../main.dart';
 import '../models/quiz_model.dart';
+import '../services/subscription_service.dart';
 
 // Screens
 import 'category_screen.dart';
@@ -17,6 +17,7 @@ import 'catchup_screen.dart';
 import 'bookmarks_screen.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
+import 'settings_screen.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -36,6 +37,12 @@ class _LandingPageState extends State<LandingPage> {
   // ✅ Ad Variables
   RewardedAd? _rewardedAd;
   bool _isAdLoaded = false;
+  bool _isAdLoading = false;
+
+  // ✅ Premium Status
+  final SubscriptionService _subscriptionService = SubscriptionService();
+  bool _isPremium = false;
+  Map<String, String> _lastPlayed = {}; // ✅ Store backend lastPlayed data
 
   final String baseUrl = "http://10.0.2.2:8080";
 
@@ -43,11 +50,26 @@ class _LandingPageState extends State<LandingPage> {
   void initState() {
     super.initState();
     _fetchUserData();
-    _loadRewardedAd();
+    _checkPremiumAndLoadAd();
+  }
+
+  Future<void> _checkPremiumAndLoadAd() async {
+    await _subscriptionService.initialize();
+    final isPremium = await _subscriptionService.isPremium();
+    if (mounted) {
+      setState(() => _isPremium = isPremium);
+      // Only load ads for free users
+      if (!_isPremium) {
+        _loadRewardedAd();
+      }
+    }
   }
 
   // --- ADMOB LOGIC ---
   void _loadRewardedAd() {
+    if (_isAdLoading || _isAdLoaded) return;
+
+    setState(() => _isAdLoading = true);
     RewardedAd.load(
       adUnitId: 'ca-app-pub-3940256099942544/5224354917', // Test ID
       request: const AdRequest(),
@@ -56,17 +78,29 @@ class _LandingPageState extends State<LandingPage> {
           setState(() {
             _rewardedAd = ad;
             _isAdLoaded = true;
+            _isAdLoading = false;
           });
         },
         onAdFailedToLoad: (error) {
           print('Ad failed to load: $error');
-          _isAdLoaded = false;
+          setState(() {
+            _isAdLoaded = false;
+            _isAdLoading = false;
+          });
         },
       ),
     );
   }
 
   void _showStreakRestoreAd(String userId) {
+    // ✅ PREMIUM USERS: Free streak restore without ads
+    if (_isPremium) {
+      Navigator.pop(context);
+      _callRestoreStreakApi(userId);
+      return;
+    }
+
+    // Free users must watch ad
     if (_rewardedAd == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -110,18 +144,6 @@ class _LandingPageState extends State<LandingPage> {
 
   // --- AUTH & DATA LOGIC ---
 
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    await GoogleSignIn().signOut();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const AuthScreen()),
-        (Route<dynamic> route) => false,
-      );
-    }
-  }
-
   Future<void> _fetchUserData() async {
     final prefs = await SharedPreferences.getInstance();
     String? userId = prefs.getString('user_id');
@@ -147,9 +169,12 @@ class _LandingPageState extends State<LandingPage> {
         if (mounted) {
           setState(() {
             xp = (data['xp'] ?? 0).toString();
-            // ✅ UPDATED: Added # prefix for Rank
             rank = (data['rank'] ?? 0).toString();
             streak = (data['streak'] ?? 1).toString();
+            // ✅ Parse lastPlayed map safely
+            if (data['lastPlayed'] != null) {
+              _lastPlayed = Map<String, String>.from(data['lastPlayed']);
+            }
           });
           _checkStreakStatus(data, userId);
         }
@@ -163,26 +188,30 @@ class _LandingPageState extends State<LandingPage> {
     String? lastActiveStr = data['lastActiveDate'];
     if (lastActiveStr == null) return;
 
-    DateTime lastActive = DateTime.parse(lastActiveStr);
-    DateTime yesterday = DateTime.now().subtract(const Duration(days: 1));
-    DateTime today = DateTime.now();
+    try {
+      DateTime lastActive = DateTime.parse(lastActiveStr);
+      DateTime now = DateTime.now();
 
-    DateTime lastDateOnly = DateTime(
-      lastActive.year,
-      lastActive.month,
-      lastActive.day,
-    );
-    DateTime yesterdayOnly = DateTime(
-      yesterday.year,
-      yesterday.month,
-      yesterday.day,
-    );
-    DateTime todayOnly = DateTime(today.year, today.month, today.day);
+      // Normalize to date only (remove time component)
+      DateTime lastDateOnly = DateTime(
+        lastActive.year,
+        lastActive.month,
+        lastActive.day,
+      );
+      DateTime todayOnly = DateTime(now.year, now.month, now.day);
 
-    if (lastDateOnly.isBefore(yesterdayOnly) && lastDateOnly != todayOnly) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showStreakLostDialog(userId);
-      });
+      // Calculate days since last active
+      int daysSinceLastActive = todayOnly.difference(lastDateOnly).inDays;
+
+      // If user hasn't played for 2+ days, their streak is broken
+      // (1 day gap is okay - they played "yesterday")
+      if (daysSinceLastActive >= 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showStreakLostDialog(userId);
+        });
+      }
+    } catch (e) {
+      print("Error parsing lastActiveDate: $e");
     }
   }
 
@@ -231,25 +260,75 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  // ✅ UPDATED: Enforce Daily Limit + Bonus Try logic
+  // ✅ UPDATED: Enforce Daily Limit + Bonus Try logic (Increasing Ad Cost)
   Future<void> _startQuiz() async {
     final prefs = await SharedPreferences.getInstance();
     String today = DateTime.now().toIso8601String().split('T')[0];
 
-    // 1. Check if they already played today
-    bool alreadyPlayed = prefs.getString('last_played_Daily') == today;
+    // Reset daily retry count if it's a new day
+    String? storedDate = prefs.getString('last_reset_date');
+    if (storedDate != today) {
+      prefs.setString('last_reset_date', today);
+      prefs.setInt('daily_retry_count', 0);
+      prefs.setBool('retry_unlocked_Daily', false);
+    }
+
+    // 1. Check if they already played today (using backend data)
+    bool alreadyPlayed =
+        _lastPlayed.containsKey("Daily") && _lastPlayed["Daily"] == today;
 
     // 2. Check if they have an unlocked retry from an ad
     bool hasRetryUnlocked = prefs.getBool('retry_unlocked_Daily') ?? false;
 
     if (alreadyPlayed && !hasRetryUnlocked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      int currentRetryCount = prefs.getInt('daily_retry_count') ?? 0;
+      int requiredAds = currentRetryCount + 1;
+
+      // ✅ Show dialog to watch ads for retry
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFFFFF9E5),
+          title: Row(
+            children: [
+              const Icon(Icons.lock_clock, color: Colors.orange),
+              const SizedBox(width: 10),
+              Text(
+                "Daily Limit Reached",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
           content: Text(
-            "You've completed today's challenge! Watch an ad on the results screen to earn a bonus try.",
+            requiredAds == 1
+                ? "You've already completed today's challenge! Watch an ad to unlock one bonus attempt."
+                : "Attempt #${currentRetryCount + 1}: You need to watch $requiredAds ads to unlock this attempt.",
             style: GoogleFonts.poppins(),
           ),
-          backgroundColor: Colors.orange,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(
+                "Cancel",
+                style: GoogleFonts.poppins(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _initiateAdWatchSequence(requiredAds);
+              },
+              icon: const Icon(Icons.play_arrow, color: Colors.white),
+              label: Text(
+                "Watch Ad",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
       );
       return;
@@ -259,8 +338,25 @@ class _LandingPageState extends State<LandingPage> {
     try {
       final url = Uri.parse('$baseUrl/api/news/quiz');
       final response = await http.get(url);
+
       if (response.statusCode == 200) {
         final List<dynamic> quizData = json.decode(response.body);
+
+        if (quizData.isEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'No quiz questions available right now. Please try again later.',
+                  style: GoogleFonts.poppins(),
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
         final List<QuizQuestion> questions = quizData
             .map((q) => QuizQuestion.fromJson(q))
             .toList();
@@ -269,6 +365,9 @@ class _LandingPageState extends State<LandingPage> {
           // 3. Consume the retry token if it was being used
           if (hasRetryUnlocked) {
             await prefs.setBool('retry_unlocked_Daily', false);
+            // Increment retry count for next time
+            int currentRetry = prefs.getInt('daily_retry_count') ?? 0;
+            await prefs.setInt('daily_retry_count', currentRetry + 1);
           }
 
           await Navigator.push(
@@ -280,11 +379,112 @@ class _LandingPageState extends State<LandingPage> {
           );
           _fetchUserData();
         }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to load quiz. Status: ${response.statusCode}',
+                style: GoogleFonts.poppins(),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       print("Error fetching quiz: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error connecting to server. Check your internet connection.',
+              style: GoogleFonts.poppins(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => isLoadingQuiz = false);
+    }
+  }
+
+  // ✅ Handle multi-ad watch sequence
+  void _initiateAdWatchSequence(int requiredAds) {
+    if (_isPremium) {
+      _unlockRetry();
+      return;
+    }
+    _watchNextAd(1, requiredAds);
+  }
+
+  void _watchNextAd(int currentAdIndex, int totalAds) {
+    if (currentAdIndex > totalAds) {
+      _unlockRetry();
+      return;
+    }
+
+    // Checking if ad is ready
+    if (_rewardedAd != null) {
+      _rewardedAd!.show(
+        onUserEarnedReward: (ad, reward) {
+          // Reset ad state immediately
+          _rewardedAd = null;
+          _isAdLoaded = false;
+          // Trigger load for NEXT ad
+          _loadRewardedAd();
+
+          // Smooth transition to next step
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _watchNextAd(currentAdIndex + 1, totalAds);
+            }
+          });
+        },
+      );
+    } else {
+      // Ad not ready yet - Polling Logic
+      // Ensure we are trying to load
+      _loadRewardedAd();
+
+      // Update UI to show we are waiting, but only if it's been a while or first check
+      // For simplicity, we just show a persistent snackbar updates
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Loading Ad $currentAdIndex of $totalAds... Please wait.",
+          ),
+          duration: const Duration(
+            seconds: 1,
+          ), // Short duration so it updates/doesn't linger too long if we succeed
+        ),
+      );
+
+      // Retry after 1 second
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          _watchNextAd(currentAdIndex, totalAds);
+        }
+      });
+    }
+  }
+
+  Future<void> _unlockRetry() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('retry_unlocked_Daily', true);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Bonus Attempt Unlocked! Tap 'Daily Challenge' to start.",
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _startQuiz();
     }
   }
 
@@ -308,32 +508,17 @@ class _LandingPageState extends State<LandingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9E5),
-      floatingActionButton: GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const ChatScreen()),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.orange.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Image.asset('assets/fox.png', width: 75, height: 75),
-        ),
-      ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          // ✅ SETTINGS BUTTON (Policy Compliance - AI Disclaimer access)
           IconButton(
-            icon: const Icon(Icons.logout, color: Color(0xFF2D2D2D)),
-            onPressed: _logout,
+            icon: const Icon(Icons.settings_outlined, color: Color(0xFF2D2D2D)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SettingsScreen()),
+            ),
           ),
         ],
         title: Row(

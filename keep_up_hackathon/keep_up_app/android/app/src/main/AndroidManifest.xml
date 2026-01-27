@@ -28,7 +28,10 @@
         android:label="keep_up_app"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
-        android:usesCleartextTraffic="true"> <meta-data
+        android:usesCleartextTraffic="true">
+        
+        <!-- AdMob App ID -->
+        <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713"/>
 

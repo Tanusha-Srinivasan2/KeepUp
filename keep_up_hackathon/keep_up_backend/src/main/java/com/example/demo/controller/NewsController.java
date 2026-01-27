@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
-
+import com.example.demo.model.Report; // Import the new model
+import com.example.demo.repository.ReportRepository;
 @RestController
 @RequestMapping("/api/news")
 @CrossOrigin(origins = "*")
@@ -24,17 +25,19 @@ public class NewsController {
     private final CategoryQuizRepository categoryQuizRepository;
     private final CatchUpService catchUpService; // ✅ Correct Injection
     private final ObjectMapper objectMapper = new ObjectMapper();
-
+    private final ReportRepository reportRepository; // ✅ Add this
     public NewsController(VertexAiService vertexAiService,
                           ToonRepository toonRepository,
                           LatestQuizRepository latestQuizRepository,
                           CategoryQuizRepository categoryQuizRepository,
-                          CatchUpService catchUpService) { // ✅ Add to Constructor
+                          CatchUpService catchUpService,
+                          ReportRepository reportRepository) { // ✅ Add to Constructor
         this.vertexAiService = vertexAiService;
         this.toonRepository = toonRepository;
         this.latestQuizRepository = latestQuizRepository;
         this.categoryQuizRepository = categoryQuizRepository;
         this.catchUpService = catchUpService;
+        this.reportRepository = reportRepository;
     }
 
     @GetMapping("/generate")
@@ -93,5 +96,31 @@ public class NewsController {
         if (date == null) date = LocalDate.now().toString();
         List<Toon> news = toonRepository.findByPublishedDate(date).collectList().block();
         return (news != null && !news.isEmpty()) ? news : toonRepository.findAll().collectList().block();
+    }
+
+    // ✅ Quiz endpoint for Daily Challenge
+    @GetMapping("/quiz")
+    public List<QuizQuestion> getDailyQuiz() {
+        try {
+            LatestQuiz latestQuiz = latestQuizRepository.findById("latest_quiz").block();
+            if (latestQuiz != null && latestQuiz.getJsonContent() != null) {
+                return objectMapper.readValue(latestQuiz.getJsonContent(), new TypeReference<List<QuizQuestion>>() {});
+            }
+            return Collections.emptyList();
+        } catch (Exception e) {
+            System.err.println("❌ Error fetching quiz: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+    @PostMapping("/report")
+    public String submitReport(@RequestBody Report report) {
+        try {
+            report.setId(UUID.randomUUID().toString());
+            report.setTimestamp(System.currentTimeMillis());
+            reportRepository.save(report).block(); // Save to DB
+            return "Report received. Thank you.";
+        } catch (Exception e) {
+            return "Error saving report: " + e.getMessage();
+        }
     }
 }

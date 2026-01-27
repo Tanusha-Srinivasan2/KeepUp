@@ -8,6 +8,9 @@ class NewsCard {
   final List<String> keywords;
   final String publishedDate;
   final String sourceUrl;
+  final String
+  sourceName; // 📰 Publisher name for display (e.g., "Reuters", "BBC")
+  final String disclaimer; // 🏥 Medical/informational disclaimer
 
   NewsCard({
     required this.id,
@@ -19,6 +22,9 @@ class NewsCard {
     required this.keywords,
     this.publishedDate = '',
     this.sourceUrl = '',
+    this.sourceName = '',
+    this.disclaimer =
+        'This is for informational purposes only. Consult a healthcare professional for medical advice.',
   });
 
   factory NewsCard.fromJson(Map<String, dynamic> json) {
@@ -43,6 +49,29 @@ class NewsCard {
       }
     }
 
+    // 4. 📰 Extract source name for attribution display
+    String sourceName = json['sourceName'] ?? '';
+    if (sourceName.isEmpty && finalUrl.isNotEmpty) {
+      // Try to extract publisher name from URL if not provided
+      try {
+        Uri uri = Uri.parse(finalUrl);
+        String host = uri.host.replaceAll('www.', '');
+        // Clean up common domain patterns
+        if (host.contains('.')) {
+          sourceName = host.split('.').first;
+          // Capitalize first letter
+          sourceName = sourceName[0].toUpperCase() + sourceName.substring(1);
+        }
+      } catch (e) {
+        sourceName = 'News Source';
+      }
+    }
+
+    // 5. 🏥 Get disclaimer (with default fallback)
+    String disclaimer =
+        json['disclaimer'] ??
+        'This is for informational purposes only. Consult a healthcare professional for medical advice.';
+
     return NewsCard(
       id: json['id'] ?? '',
       title: title,
@@ -53,6 +82,8 @@ class NewsCard {
       keywords: List<String>.from(json['keywords'] ?? []),
       publishedDate: json['publishedDate'] ?? '',
       sourceUrl: finalUrl, // ✅ Always safe
+      sourceName: sourceName, // ✅ Publisher name for display
+      disclaimer: disclaimer, // 🏥 Medical disclaimer
     );
   }
 }

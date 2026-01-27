@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import '../services/auth_service.dart'; // ❌ REMOVE THIS
-import 'landing_page.dart'; // ✅ Change this to your Home/Landing Page
+import 'landing_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,15 +9,26 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
-  int _stage = 0;
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  bool _showContent = false;
   bool _initialized = false;
+  late AnimationController _bounceController;
+  late Animation<double> _bounceAnimation;
 
   @override
   void initState() {
     super.initState();
-    // ❌ REMOVE AuthService.loginOrRegister();
-    // We are already logged in when we get here!
+
+    // Bounce animation for the fox
+    _bounceController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+
+    _bounceAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _bounceController, curve: Curves.elasticOut),
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_initialized) {
@@ -28,31 +38,32 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
-  void _precacheAndStart() {
-    precacheImage(const AssetImage('assets/splash_pattern.png'), context);
-    precacheImage(const AssetImage('assets/jumpfox.png'), context);
-    precacheImage(const AssetImage('assets/foxlogo.png'), context);
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    super.dispose();
+  }
 
+  void _precacheAndStart() {
+    precacheImage(const AssetImage('assets/jumpfox.png'), context);
     _startAnimationSequence();
   }
 
   void _startAnimationSequence() async {
-    // STAGE 0: Show Logo
-    await Future.delayed(const Duration(seconds: 1)); // Shorter wait
+    // Short delay then show content
+    await Future.delayed(const Duration(milliseconds: 300));
 
-    // STAGE 1: Transition Background & Fox
-    if (mounted) setState(() => _stage = 1);
-    await Future.delayed(const Duration(milliseconds: 1500));
+    if (mounted) {
+      setState(() => _showContent = true);
+      _bounceController.forward();
+    }
 
-    // STAGE 2: "Promoted" Text
-    if (mounted) setState(() => _stage = 2);
-    await Future.delayed(const Duration(milliseconds: 3000));
+    // Wait for the animation to complete, then navigate
+    await Future.delayed(const Duration(seconds: 3));
 
-    // FINISH: Go to the Main App!
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        // ✅ Navigate to HomeScreen (or LandingPage)
         MaterialPageRoute(builder: (context) => const LandingPage()),
       );
     }
@@ -60,124 +71,97 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... (Keep your existing build/UI code exactly the same) ...
-    // It was perfect!
     return Scaffold(
-      body: Stack(
-        children: [
-          // LAYER 1: SOLID GOLD BACKGROUND
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 800),
-            opacity: _stage >= 1 ? 1.0 : 0.0,
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFFFD54F), Color(0xFFFFB300)],
-                ),
-              ),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFD54F), Color(0xFFFFB300)],
           ),
-
-          // LAYER 2: PATTERN BACKGROUND
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 500),
-            opacity: _stage == 0 ? 1.0 : 0.0,
-            child: Container(
-              color: const Color(0xFFFFE082),
-              child: Image.asset(
-                'assets/splash_pattern.png',
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-          ),
-
-          // LAYER 3: ANIMATED CONTENT
-          SizedBox(
-            width: double.infinity,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // VIEW 1: APP LOGO
-                AnimatedOpacity(
-                  opacity: _stage == 0 ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 500),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                            ),
-                          ],
+        ),
+        child: SafeArea(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Main content column
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Fox + Diamond
+                  AnimatedBuilder(
+                    animation: _bounceAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: 0.5 + (_bounceAnimation.value * 0.5),
+                        child: Opacity(
+                          opacity: _bounceAnimation.value.clamp(0.0, 1.0),
+                          child: child,
                         ),
-                        padding: const EdgeInsets.all(15),
-                        child: Image.asset('assets/foxlogo.png'),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "KeepUp",
-                        style: GoogleFonts.nunito(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // VIEW 2: THE JUMPING FOX
-                if (_stage >= 1)
-                  AnimatedSlide(
-                    offset: _stage == 2
-                        ? const Offset(0, -0.2)
-                        : const Offset(0, 0),
-                    duration: const Duration(milliseconds: 1000),
-                    curve: Curves.easeOutBack,
-                    child: AnimatedScale(
-                      scale: _stage >= 1 ? 1.3 : 0.5,
-                      duration: const Duration(milliseconds: 800),
-                      curve: Curves.elasticOut,
-                      child: Image.asset('assets/jumpfox.png', height: 320),
-                    ),
-                  ),
-
-                // VIEW 3: PROMOTED TEXT
-                Positioned(
-                  bottom: 150,
-                  child: AnimatedOpacity(
-                    opacity: _stage == 2 ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 500),
-                    child: Column(
+                      );
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        Text(
-                          "Welcome back!",
-                          style: GoogleFonts.nunito(
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        // The jumping fox
+                        Image.asset('assets/jumpfox.png', height: 280),
+                        // Diamond floating above
+                        Positioned(
+                          top: -20,
+                          right: -30,
+                          child: AnimatedBuilder(
+                            animation: _bounceController,
+                            builder: (context, child) {
+                              // Subtle floating effect for diamond
+                              return Transform.translate(
+                                offset: Offset(0, -10 * _bounceAnimation.value),
+                                child: child,
+                              );
+                            },
+                            child: Image.asset(
+                              'assets/diamond1.png',
+                              height: 60,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
+
+                  const SizedBox(height: 60),
+
+                  // Welcome text
+                  AnimatedOpacity(
+                    opacity: _showContent ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 800),
+                    child: AnimatedSlide(
+                      offset: _showContent ? Offset.zero : const Offset(0, 0.5),
+                      duration: const Duration(milliseconds: 800),
+                      curve: Curves.easeOutBack,
+                      child: Text(
+                        "Welcome back!",
+                        style: GoogleFonts.nunito(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

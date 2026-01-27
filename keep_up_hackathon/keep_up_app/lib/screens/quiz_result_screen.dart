@@ -3,7 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:in_app_review/in_app_review.dart'; // ✅ In-App Review API
 
+import '../services/subscription_service.dart';
 import 'landing_page.dart';
 
 class QuizResultScreen extends StatefulWidget {
@@ -28,13 +30,48 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
   RewardedAd? _rewardedAd;
   bool _isRetrying = false;
   bool _isAdLoaded = false;
+  final SubscriptionService _subscriptionService = SubscriptionService();
+  bool _isPremium = false;
 
   final String baseUrl = "http://10.0.2.2:8080";
 
   @override
   void initState() {
     super.initState();
-    _loadRewardedAd();
+    _checkPremiumAndLoadAd();
+  }
+
+  Future<void> _checkPremiumAndLoadAd() async {
+    await _subscriptionService.initialize();
+    final isPremium = await _subscriptionService.isPremium();
+    if (mounted) {
+      setState(() => _isPremium = isPremium);
+      // Only load ads for free users
+      if (!_isPremium) {
+        _loadRewardedAd();
+      }
+
+      // ✅ Trigger In-App Review after successful quiz (when user is happy)
+      if (widget.score >= (widget.totalQuestions / 2)) {
+        _maybeRequestReview();
+      }
+    }
+  }
+
+  // ✅ In-App Review - Only prompt occasionally when user is happy
+  Future<void> _maybeRequestReview() async {
+    final prefs = await SharedPreferences.getInstance();
+    int quizCount = prefs.getInt('successful_quiz_count') ?? 0;
+    quizCount++;
+    await prefs.setInt('successful_quiz_count', quizCount);
+
+    // Only request review every 3rd successful quiz to avoid annoying users
+    if (quizCount % 3 == 0) {
+      final inAppReview = InAppReview.instance;
+      if (await inAppReview.isAvailable()) {
+        await inAppReview.requestReview();
+      }
+    }
   }
 
   // 1. LOAD AD
@@ -57,8 +94,15 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
     );
   }
 
-  // 2. WATCH AD
+  // 2. WATCH AD OR FREE RETRY FOR PREMIUM
   Future<void> _watchAdToRetry() async {
+    // ✅ PREMIUM USERS: Free retry without ads
+    if (_isPremium) {
+      await _unlockQuizForRetry();
+      return;
+    }
+
+    // Free users must watch ad
     if (_rewardedAd == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Ad loading... please try again.")),
@@ -181,7 +225,9 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
                             color: Colors.white,
                           ),
                     label: Text(
-                      "Unlock Bonus Try (Watch Ad)",
+                      _isPremium
+                          ? "Free Retry (Premium)"
+                          : "Unlock Bonus Try (Watch Ad)",
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
