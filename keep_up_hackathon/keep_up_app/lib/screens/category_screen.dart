@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home_screen.dart';
@@ -18,7 +20,7 @@ class CategoryScreen extends StatefulWidget {
 }
 
 class _CategoryScreenState extends State<CategoryScreen> {
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   // ✅ UPDATED: Using Local Assets for Instant Loading
   final List<Map<String, dynamic>> categories = const [

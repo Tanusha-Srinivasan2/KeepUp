@@ -7,9 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// This service handles:
 /// - Daily news updates in the background
-/// - Caching latest news for offline reading
+import '../config/api_config.dart';
+
 class BackgroundSyncService {
-  static const String baseUrl = "http://10.0.2.2:8080";
+  static final String baseUrl = ApiConfig.baseUrl;
   static const String taskName = "dailyNewsSync";
 
   /// Executes background sync task - called by WorkManager

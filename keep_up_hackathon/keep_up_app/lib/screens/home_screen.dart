@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _selectedDate;
 
   // ✅ API Base URL
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   @override
   void initState() {
@@ -468,16 +470,62 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // ✅ SOURCE ATTRIBUTION (Policy Compliance)
-                    if (card.sourceName.isNotEmpty)
-                      Text(
-                        "Source: ${card.sourceName}",
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          fontStyle: FontStyle.italic,
+                    // ✅ SOURCE & BIAS ATTRIBUTION
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (card.sourceName.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              "Source: ${card.sourceName}",
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: card.biasRating.toLowerCase() == 'left'
+                                ? Colors.blue.withOpacity(0.2)
+                                : card.biasRating.toLowerCase() == 'right'
+                                    ? Colors.red.withOpacity(0.2)
+                                    : Colors.purple.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.balance,
+                                size: 10,
+                                color: card.biasRating.toLowerCase() == 'left'
+                                    ? Colors.blue.shade700
+                                    : card.biasRating.toLowerCase() == 'right'
+                                        ? Colors.red.shade700
+                                        : Colors.purple.shade700,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                card.biasRating,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: card.biasRating.toLowerCase() == 'left'
+                                      ? Colors.blue.shade700
+                                      : card.biasRating.toLowerCase() == 'right'
+                                          ? Colors.red.shade700
+                                          : Colors.purple.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
+                    ),
                   ],
                 ),
               ),

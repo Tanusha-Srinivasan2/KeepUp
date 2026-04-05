@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/news_model.dart';
@@ -18,7 +20,7 @@ class BookmarksScreen extends StatefulWidget {
 class _BookmarksScreenState extends State<BookmarksScreen> {
   List<NewsCard> bookmarks = [];
   bool isLoading = true;
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
   final SubscriptionService _subscriptionService = SubscriptionService();
   bool _isPremium = false;
   bool _checkingPremium = true;
@@ -50,7 +52,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
 
     try {
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/$userId/bookmarks',
+        '${ApiConfig.baseUrl}/api/news/user/$userId/bookmarks',
       );
       final response = await http.get(url);
 
@@ -77,7 +79,7 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
     });
 
     final url = Uri.parse(
-      'http://10.0.2.2:8080/api/news/user/$userId/bookmark/$newsId',
+      '${ApiConfig.baseUrl}/api/news/user/$userId/bookmark/$newsId',
     );
     await http.delete(url);
   }

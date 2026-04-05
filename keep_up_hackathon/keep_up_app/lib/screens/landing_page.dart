@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -44,7 +46,7 @@ class _LandingPageState extends State<LandingPage> {
   bool _isPremium = false;
   Map<String, String> _lastPlayed = {}; // ✅ Store backend lastPlayed data
 
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   @override
   void initState() {
@@ -169,7 +171,6 @@ class _LandingPageState extends State<LandingPage> {
         if (mounted) {
           setState(() {
             xp = (data['xp'] ?? 0).toString();
-            rank = (data['rank'] ?? 0).toString();
             streak = (data['streak'] ?? 1).toString();
             // ✅ Parse lastPlayed map safely
             if (data['lastPlayed'] != null) {
@@ -181,6 +182,30 @@ class _LandingPageState extends State<LandingPage> {
       }
     } catch (e) {
       print("Error loading stats: $e");
+    }
+
+    // ✅ Fetch rank from leaderboard
+    try {
+      final lbUrl = Uri.parse('$baseUrl/api/news/user/leaderboard');
+      final lbResponse = await http.get(lbUrl);
+
+      if (lbResponse.statusCode == 200) {
+        final List<dynamic> leaderboard = json.decode(lbResponse.body);
+        int userRank = 0;
+        for (int i = 0; i < leaderboard.length; i++) {
+          if (leaderboard[i]['userId'] == userId) {
+            userRank = i + 1;
+            break;
+          }
+        }
+        if (mounted) {
+          setState(() {
+            rank = userRank > 0 ? userRank.toString() : "-";
+          });
+        }
+      }
+    } catch (e) {
+      print("Error loading rank: $e");
     }
   }
 
@@ -282,9 +307,42 @@ class _LandingPageState extends State<LandingPage> {
 
     if (alreadyPlayed && !hasRetryUnlocked) {
       int currentRetryCount = prefs.getInt('daily_retry_count') ?? 0;
-      int requiredAds = currentRetryCount + 1;
 
-      // ✅ Show dialog to watch ads for retry
+      // ✅ Cap at 1 bonus retry per day
+      if (currentRetryCount >= 1) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFFFFF9E5),
+            title: Row(
+              children: [
+                const Icon(Icons.lock_clock, color: Colors.orange),
+                const SizedBox(width: 10),
+                Text(
+                  "No More Retries",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            content: Text(
+              "You've used your bonus attempt for today. Come back tomorrow for a new challenge!",
+              style: GoogleFonts.poppins(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  "OK",
+                  style: GoogleFonts.poppins(color: Colors.orange),
+                ),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      // ✅ Show dialog to watch ad for 1 bonus retry
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -300,9 +358,7 @@ class _LandingPageState extends State<LandingPage> {
             ],
           ),
           content: Text(
-            requiredAds == 1
-                ? "You've already completed today's challenge! Watch an ad to unlock one bonus attempt."
-                : "Attempt #${currentRetryCount + 1}: You need to watch $requiredAds ads to unlock this attempt.",
+            "You've already completed today's challenge! Watch an ad to unlock one bonus attempt.",
             style: GoogleFonts.poppins(),
           ),
           actions: [
@@ -316,7 +372,7 @@ class _LandingPageState extends State<LandingPage> {
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(ctx);
-                _initiateAdWatchSequence(requiredAds);
+                _initiateAdWatchSequence(1);
               },
               icon: const Icon(Icons.play_arrow, color: Colors.white),
               label: Text(

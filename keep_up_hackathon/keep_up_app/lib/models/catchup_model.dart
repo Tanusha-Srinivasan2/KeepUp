@@ -3,8 +3,10 @@ class CatchUpItem {
   final String headline;
   final String summary;
   final String date;
-  final String sourceUrl; // 📰 New: Link to original article
-  final String sourceName; // 📰 New: Publisher name for display
+  final String sourceUrl; // 📰 Link to original article
+  final String sourceName; // 📰 Publisher name for display
+  final String biasRating; // Political bias
+  final String biasExplanation; // Explanation of bias
 
   CatchUpItem({
     required this.topic,
@@ -13,6 +15,8 @@ class CatchUpItem {
     required this.date,
     this.sourceUrl = '',
     this.sourceName = '',
+    this.biasRating = 'Center',
+    this.biasExplanation = 'Analyzing sources neutrally.',
   });
 
   factory CatchUpItem.fromJson(Map<String, dynamic> json) {
@@ -79,6 +83,8 @@ class CatchUpItem {
       date: formattedDate,
       sourceUrl: sourceUrl,
       sourceName: sourceName,
+      biasRating: json['biasRating'] ?? 'Center',
+      biasExplanation: json['biasExplanation'] ?? 'No bias detected.',
     );
   }
 }

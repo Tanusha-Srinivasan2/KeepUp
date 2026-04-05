@@ -109,8 +109,10 @@ class SubscriptionService {
 
   /// Check if user has active premium subscription
   Future<bool> isPremium() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_premiumKey) ?? false;
+    // For now, removing premium lock as requested
+    return true; 
+    // final prefs = await SharedPreferences.getInstance();
+    // return prefs.getBool(_premiumKey) ?? false;
   }
 
   /// Set premium status (called after successful purchase)

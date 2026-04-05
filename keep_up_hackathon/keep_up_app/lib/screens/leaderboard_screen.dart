@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import '../main.dart';
+import 'dart:async';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -16,9 +18,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   List<dynamic> leaderboardData = [];
   bool isLoading = true;
   String? currentUserId;
+  String? _errorMessage;
 
   // Use 10.0.2.2 for Android Emulator, localhost for iOS
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   @override
   void initState() {
@@ -27,29 +30,64 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Future<void> _fetchLeaderboard() async {
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
     final prefs = await SharedPreferences.getInstance();
     currentUserId = prefs.getString('user_id');
 
     try {
-      // ✅ UPDATED URL: Points to User Controller
       final url = Uri.parse('$baseUrl/api/news/user/leaderboard');
 
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 30),
+      );
 
       if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
         if (mounted) {
           setState(() {
-            leaderboardData = json.decode(response.body);
+            leaderboardData = decoded is List ? decoded : [];
             isLoading = false;
           });
         }
       } else {
-        print("Failed to load leaderboard: ${response.statusCode}");
-        if (mounted) setState(() => isLoading = false);
+        print("Failed to load leaderboard: ${response.statusCode} - ${response.body}");
+        if (mounted) {
+          setState(() {
+            _errorMessage = "Server error (${response.statusCode}). Tap retry.";
+            isLoading = false;
+          });
+        }
+      }
+    } on TimeoutException {
+      print("Leaderboard request timed out");
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Request timed out. Check your connection and retry.";
+          isLoading = false;
+        });
+      }
+    } on FormatException catch (e) {
+      print("Invalid leaderboard response format: $e");
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Received an invalid response from the server.";
+          isLoading = false;
+        });
       }
     } catch (e) {
       print("Error fetching leaderboard: $e");
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Could not connect to server. Check your connection.";
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -83,38 +121,105 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(color: Colors.orange),
                   )
-                : Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFEFCE0),
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(40),
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(40),
-                      ),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 20,
-                          horizontal: 24,
-                        ),
-                        itemCount: leaderboardData.length,
-                        separatorBuilder: (context, index) => Divider(
-                          color: Colors.grey.withOpacity(0.3),
-                          thickness: 1,
-                          height: 24,
-                        ),
-                        itemBuilder: (context, index) {
-                          final user = leaderboardData[index];
-                          return _buildUserRow(user, index + 1);
-                        },
-                      ),
-                    ),
+                : RefreshIndicator(
+                    onRefresh: _fetchLeaderboard,
+                    color: Colors.orange,
+                    child: (_errorMessage != null || leaderboardData.isEmpty)
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [_buildEmptyOrErrorState()],
+                          )
+                        : Container(
+                            width: double.infinity,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFEFCE0),
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(40),
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(40),
+                              ),
+                              child: ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 20,
+                                  horizontal: 24,
+                                ),
+                                itemCount: leaderboardData.length,
+                                separatorBuilder: (context, index) => Divider(
+                                  color: Colors.grey.withOpacity(0.3),
+                                  thickness: 1,
+                                  height: 24,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final user = leaderboardData[index];
+                                  return _buildUserRow(user, index + 1);
+                                },
+                              ),
+                            ),
+                          ),
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyOrErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _errorMessage != null ? Icons.cloud_off : Icons.leaderboard_outlined,
+              size: 60,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _errorMessage != null
+                  ? "Couldn't load leaderboard"
+                  : "No players yet",
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF2D2D2D),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage ?? "Play the Daily Challenge to be the first on the board!",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 25),
+            ElevatedButton.icon(
+              onPressed: _fetchLeaderboard,
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              label: Text(
+                "Retry",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

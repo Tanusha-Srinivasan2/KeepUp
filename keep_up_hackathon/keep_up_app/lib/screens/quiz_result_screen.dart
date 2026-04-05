@@ -4,6 +4,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:in_app_review/in_app_review.dart'; // ✅ In-App Review API
+import '../config/api_config.dart';
+
 
 import '../services/subscription_service.dart';
 import 'landing_page.dart';
@@ -32,13 +34,28 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
   bool _isAdLoaded = false;
   final SubscriptionService _subscriptionService = SubscriptionService();
   bool _isPremium = false;
+  bool _hasUsedBonusRetry = false;
 
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   @override
   void initState() {
     super.initState();
     _checkPremiumAndLoadAd();
+    _checkBonusRetryStatus();
+  }
+
+  Future<void> _checkBonusRetryStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    String today = DateTime.now().toIso8601String().split('T')[0];
+    String? storedDate = prefs.getString('last_reset_date');
+    int retryCount = prefs.getInt('daily_retry_count') ?? 0;
+
+    if (mounted) {
+      setState(() {
+        _hasUsedBonusRetry = (storedDate == today && retryCount >= 1);
+      });
+    }
   }
 
   Future<void> _checkPremiumAndLoadAd() async {
@@ -204,8 +221,8 @@ class _QuizResultScreenState extends State<QuizResultScreen> {
               ),
               const SizedBox(height: 60),
 
-              // ✅ RETRY BUTTON (Only if not a perfect score)
-              if (!isPerfect)
+              // ✅ RETRY BUTTON (Only if not perfect and bonus retry not used)
+              if (!isPerfect && !_hasUsedBonusRetry)
                 SizedBox(
                   width: double.infinity,
                   height: 55,

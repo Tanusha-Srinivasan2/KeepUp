@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
+
 
 import '../models/news_model.dart';
 import 'chat_screen.dart';
@@ -17,7 +19,7 @@ class NewsDetailScreen extends StatefulWidget {
 }
 
 class _NewsDetailScreenState extends State<NewsDetailScreen> {
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
 
   String _getAssetImage(String topic) {
     String t = topic.toLowerCase();
@@ -112,6 +114,138 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         ],
       ),
     );
+  }
+
+  // --- BIAS METER UI ---
+  Widget _buildBiasMeter(String rating, String explanation) {
+    Color getBiasColor(String r) {
+      if (r.toLowerCase() == 'left') return Colors.blue;
+      if (r.toLowerCase() == 'right') return Colors.red;
+      return Colors.purple; // Center
+    }
+
+    double getPointerAlignment(String r) {
+      if (r.toLowerCase() == 'left') return -1.0;
+      if (r.toLowerCase() == 'right') return 1.0;
+      return 0.0; // Center
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      margin: const EdgeInsets.only(bottom: 25),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.balance, color: getBiasColor(rating), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                "Political Bias Analysis",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          // Spectrum Bar
+          Stack(
+            children: [
+              Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: const LinearGradient(
+                    colors: [Colors.blue, Colors.purple, Colors.red],
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment(getPointerAlignment(rating), 0),
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Left", style: GoogleFonts.poppins(fontSize: 10, color: Colors.blue)),
+              Text("Center", style: GoogleFonts.poppins(fontSize: 10, color: Colors.purple)),
+              Text("Right", style: GoogleFonts.poppins(fontSize: 10, color: Colors.red)),
+            ],
+          ),
+          const Divider(height: 20),
+          Text(
+            "Transparency (Why?):",
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            explanation,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.black87,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- CONTEXTUAL POPUP ---
+  void _showBiasWarning(BuildContext context) {
+    if (widget.newsItem.biasRating.toLowerCase() != 'center') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.orange.shade900,
+            duration: const Duration(seconds: 5),
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "This is a ${widget.newsItem.biasRating}-leaning source. We recommend comparing with neutral sources like Reuters or AP.",
+                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _showBiasWarning(context);
   }
 
   @override
@@ -294,6 +428,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         ],
                       ),
                     ),
+                  // Bias Meter UI
+                  _buildBiasMeter(widget.newsItem.biasRating, widget.newsItem.biasExplanation),
                   SizedBox(
                     width: double.infinity,
                     height: 55,

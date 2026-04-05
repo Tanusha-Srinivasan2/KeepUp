@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart'; // KeepUpApp colors
@@ -183,7 +185,7 @@ class _QuizScreenState extends State<QuizScreen> {
       try {
         // Matches Backend: @PostMapping("/{userId}/xp")
         final url = Uri.parse(
-          'http://10.0.2.2:8080/api/news/user/$userId/xp?points=$earnedXp&category=${widget.quizId}',
+          '${ApiConfig.baseUrl}/api/news/user/$userId/xp?points=$earnedXp&category=${widget.quizId}',
         );
 
         final response = await http.post(url);

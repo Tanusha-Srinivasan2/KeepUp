@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 
 import '../main.dart';
 import 'landing_page.dart';
@@ -42,7 +44,7 @@ class _AuthScreenState extends State<AuthScreen> {
       // so even if the backend is down, the user can still log in locally.
       try {
         final url = Uri.parse(
-          'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
+          '${ApiConfig.baseUrl}/api/news/user/create?userId=$userId&name=$name',
         );
         await http.post(url);
       } catch (e) {

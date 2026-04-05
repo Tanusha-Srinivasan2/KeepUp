@@ -8,9 +8,10 @@ class NewsCard {
   final List<String> keywords;
   final String publishedDate;
   final String sourceUrl;
-  final String
-  sourceName; // 📰 Publisher name for display (e.g., "Reuters", "BBC")
+  final String sourceName; // 📰 Publisher name for display
   final String disclaimer; // 🏥 Medical/informational disclaimer
+  final String biasRating; // Political bias (Left, Center, Right)
+  final String biasExplanation; // Explanation of the bias rating
 
   NewsCard({
     required this.id,
@@ -25,6 +26,8 @@ class NewsCard {
     this.sourceName = '',
     this.disclaimer =
         'This is for informational purposes only. Consult a healthcare professional for medical advice.',
+    this.biasRating = 'Center',
+    this.biasExplanation = 'Analyzing sources neutrally.',
   });
 
   factory NewsCard.fromJson(Map<String, dynamic> json) {
@@ -84,6 +87,8 @@ class NewsCard {
       sourceUrl: finalUrl, // ✅ Always safe
       sourceName: sourceName, // ✅ Publisher name for display
       disclaimer: disclaimer, // 🏥 Medical disclaimer
+      biasRating: json['biasRating'] ?? 'Center',
+      biasExplanation: json['biasExplanation'] ?? 'No bias detected.',
     );
   }
 }

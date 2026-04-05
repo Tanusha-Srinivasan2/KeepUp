@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +20,7 @@ class CatchUpScreen extends StatefulWidget {
 class _CatchUpScreenState extends State<CatchUpScreen> {
   List<dynamic> weeklySummaries = [];
   bool isLoading = true;
-  final String baseUrl = "http://10.0.2.2:8080";
+  final String baseUrl = ApiConfig.baseUrl;
   final SubscriptionService _subscriptionService = SubscriptionService();
   bool _isPremium = false;
   bool _checkingPremium = true;
@@ -44,7 +46,7 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
   }
 
   Future<void> fetchCatchUp() async {
-    final url = Uri.parse('http://10.0.2.2:8080/api/news/catchup');
+    final url = Uri.parse('${ApiConfig.baseUrl}/api/news/catchup');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -326,6 +328,8 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
   Widget _buildSummaryItem(Map<String, dynamic> item) {
     String title = item['title'] ?? "News";
     String description = item['description'] ?? "";
+    String sourceName = item['sourceName'] ?? "";
+    String biasRating = item['biasRating'] ?? "Center";
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 15.0),
@@ -364,6 +368,49 @@ class _CatchUpScreenState extends State<CatchUpScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
+                if (sourceName.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "Source: $sourceName",
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              color: Colors.grey[500],
+                              fontStyle: FontStyle.italic,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: biasRating.toLowerCase() == 'left'
+                                ? Colors.blue.withOpacity(0.2)
+                                : biasRating.toLowerCase() == 'right'
+                                    ? Colors.red.withOpacity(0.2)
+                                    : Colors.purple.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            biasRating,
+                            style: GoogleFonts.poppins(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: biasRating.toLowerCase() == 'left'
+                                  ? Colors.blue.shade700
+                                  : biasRating.toLowerCase() == 'right'
+                                      ? Colors.red.shade700
+                                      : Colors.purple.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 // ✅ REPORT BUTTON (Policy Compliance)
                 GestureDetector(
                   onTap: () => _showReportDialog(title, description),

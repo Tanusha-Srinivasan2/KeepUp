@@ -102,32 +102,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       );
                     },
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        // The jumping fox
-                        Image.asset('assets/jumpfox.png', height: 280),
-                        // Diamond floating above
-                        Positioned(
-                          top: -20,
-                          right: -30,
-                          child: AnimatedBuilder(
-                            animation: _bounceController,
-                            builder: (context, child) {
-                              // Subtle floating effect for diamond
-                              return Transform.translate(
-                                offset: Offset(0, -10 * _bounceAnimation.value),
-                                child: child,
-                              );
-                            },
-                            child: Image.asset(
-                              'assets/diamond1.png',
-                              height: 60,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: Image.asset('assets/jumpfox.png', height: 280),
                   ),
 
                   const SizedBox(height: 60),

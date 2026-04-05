@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
+
 
 class AuthService {
   static const String _keyUserId = 'user_id';
@@ -54,7 +56,7 @@ class AuthService {
     try {
       // Use 10.0.2.2 for Android Emulator to reach your local Spring Boot server
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/create?userId=$userId&name=$name',
+        '${ApiConfig.baseUrl}/api/news/user/create?userId=$userId&name=$name',
       );
 
       final response = await http.post(url);
@@ -90,7 +92,7 @@ class AuthService {
 
       // 1. Call backend to delete user data from Firestore
       final url = Uri.parse(
-        'http://10.0.2.2:8080/api/news/user/$userId/delete',
+        '${ApiConfig.baseUrl}/api/news/user/$userId/delete',
       );
       final response = await http.delete(url);
 
