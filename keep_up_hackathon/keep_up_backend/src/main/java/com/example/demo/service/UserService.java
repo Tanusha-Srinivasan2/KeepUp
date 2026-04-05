@@ -177,9 +177,11 @@ public class UserService {
         List<Map<String, Object>> leaderboard = new ArrayList<>();
         for (DocumentSnapshot document : query.get().get().getDocuments()) {
             Map<String, Object> entry = new HashMap<>();
+            entry.put("userId", document.getId());
             entry.put("name", document.getString("name"));
             entry.put("xp", document.get("xp"));
             entry.put("league", document.getString("league"));
+            entry.put("streak", document.get("streak"));
             leaderboard.add(entry);
         }
         return leaderboard;

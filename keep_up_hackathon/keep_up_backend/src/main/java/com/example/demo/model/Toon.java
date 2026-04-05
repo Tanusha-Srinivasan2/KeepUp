@@ -22,6 +22,8 @@ public class Toon {
     private String sourceUrl;
     private String sourceName;  // 📰 Publisher name for source attribution display
     private String disclaimer;  // 🏥 Medical/informational disclaimer
+    private String biasRating;      // Left, Center, or Right
+    private String biasExplanation; // Reasoning
     private String publishedDate;
     private long timestamp;
 
@@ -50,6 +52,10 @@ public class Toon {
     public void setSourceName(String sourceName) { this.sourceName = sourceName; }
     public String getDisclaimer() { return disclaimer; }
     public void setDisclaimer(String disclaimer) { this.disclaimer = disclaimer; }
+    public String getBiasRating() { return biasRating; }
+    public void setBiasRating(String biasRating) { this.biasRating = biasRating; }
+    public String getBiasExplanation() { return biasExplanation; }
+    public void setBiasExplanation(String biasExplanation) { this.biasExplanation = biasExplanation; }
     public String getPublishedDate() { return publishedDate; }
     public void setPublishedDate(String publishedDate) { this.publishedDate = publishedDate; }
     public long getTimestamp() { return timestamp; }

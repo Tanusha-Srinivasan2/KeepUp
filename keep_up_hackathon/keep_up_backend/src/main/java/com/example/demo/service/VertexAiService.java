@@ -1,26 +1,77 @@
 package com.example.demo.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.vertexai.gemini.VertexAiGeminiChatOptions;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class VertexAiService {
+    
+    @Value("${gemini.api.key}")
+    private String geminiApiKey;
 
-    private final ChatModel chatModel;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestTemplate restTemplate = new RestTemplate();
 
-    public VertexAiService(ChatModel chatModel) {
-        this.chatModel = chatModel;
+    public VertexAiService() {
+    }
+
+    private String geminiCall(String prompt, boolean useSearch, double temperature) {
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiApiKey;
+        int maxRetries = 3;
+        int currentRetry = 0;
+
+        while (currentRetry < maxRetries) {
+            try {
+                Map<String, Object> textPart = Map.of("text", prompt);
+                Map<String, Object> partContainer = Map.of("parts", List.of(textPart));
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("contents", List.of(partContainer));
+                requestBody.put("generationConfig", Map.of("temperature", temperature));
+
+                if (useSearch) {
+                    // Natively add free tier Google Search via AI Studio
+                    requestBody.put("tools", List.of(Map.of("googleSearch", Map.of())));
+                }
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
+
+                ResponseEntity<String> response = restTemplate.postForEntity(url, entity, String.class);
+                JsonNode root = objectMapper.readTree(response.getBody());
+
+                // Extract the generated text safely from JSON
+                JsonNode textNode = root.at("/candidates/0/content/parts/0/text");
+                return textNode.isMissingNode() ? "" : textNode.asText();
+            } catch (org.springframework.web.client.HttpClientErrorException.TooManyRequests e) {
+                currentRetry++;
+                System.err.println("⚠️ Google API Rate Limit Hit (429). Retrying in " + (currentRetry * 5) + " seconds...");
+                try {
+                    Thread.sleep(currentRetry * 5000L); // Wait 5s, 10s, 15s instead of immediately crashing
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (Exception e) {
+                System.err.println("Gemini AI Studio Error: " + e.getMessage());
+                return "{\"error\": \"AI request failed\"}";
+            }
+        }
+        return "{\"error\": \"Rate limit exceeded after retries\"}";
     }
 
     // --- PHASE 1: RESEARCH (Fixed Date Logic) ---
@@ -61,30 +112,26 @@ public class VertexAiService {
         - Keep all content appropriate for ages 13+ with educational value.
         
         📰 SOURCE ATTRIBUTION (MANDATORY):
-        - Every news story MUST include a "Source: [Publisher Name]" with the original article URL.
-        - Use the actual source URL from Google Search grounding metadata when available.
-        - If no direct URL is available, use the publisher's main website.
+        - Every news story MUST include "Source: [Publisher Name]" (e.g., "Reuters", "CNN", "Fox News", "BBC"). NEVER output "Google" as the source.
+        - You MUST find the specific URL of the original article. Do NOT provide google.com tracking links or search links. Provide the true root article URL.
+        - UNDER NO CIRCUMSTANCES should you use or output "vertexaisearch.cloud.google.com" URLs. They will break the system. Output the actual publisher's URL (e.g., "https://www.bbc.com/news/123").
         
         ✍️ TRANSFORMATIVE CONTENT (MANDATORY):
         - Keep summaries brief: 3-4 bullet points of key facts only.
-        - Do NOT copy the expressive narrative style of the original article.
-        - Use your own factual, neutral language to describe events.
-        - Focus on WHO, WHAT, WHEN, WHERE - not opinion or editorial tone.
+        - First, read the original article and assess its political bias based on its loaded language, spin, or entity sentiment.
+        - Second, write your OWN factual, neutral summary, stripped of any of the original article's spin or emotion.
         
         OUTPUT FORMAT PER STORY:
         - Category: [Category Name]
         - Headline: [Catchy but factual Title]
         - Facts: [3-4 bullet points summarizing key facts in neutral language]
-        - Source: [Publisher Name]
-        - SourceUrl: [Direct article URL or publisher website]
+        - Source: [Actual News Publisher Name, e.g., CNN, WSJ, BBC. NOT Google]
+        - SourceUrl: [Exact Direct Article URL, NOT a Google Search Link]
+        - BiasRating: [Left, Center, or Right] - Based on the ORIGINAL article's tone, NOT your summary. Evaluate loaded words, political leaning, and sentiment.
+        - BiasExplanation: [1 short sentence explaining why the ORIGINAL article was given this bias rating]
         """.formatted(targetDate, region, targetDate);
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder()
-                        .model("gemini-2.5-flash")
-                        .googleSearchRetrieval(true) // ✅ Search Enabled
-                        .build()
-        )).getResult().getOutput().getText();
+        return geminiCall(prompt, true, 0.7);
     }
 
     // --- PHASE 2: FORMATTER ---
@@ -108,14 +155,14 @@ public class VertexAiService {
             - All content must be appropriate for ages 13+.
             
             📰 SOURCE ATTRIBUTION (MANDATORY):
-            - The "sourceUrl" field MUST contain a valid, clickable URL to the original article.
-            - The "sourceName" field MUST contain the publisher's name for display (e.g., "Reuters", "BBC", "TechCrunch").
-            - If no direct URL exists, use a Google News search URL for the headline.
+            - The "sourceUrl" field MUST contain the exact direct, clickable URL to the original article. No Google tracking URLs.
+            - UNDER NO CIRCUMSTANCES include "vertexaisearch.cloud.google.com" in the "sourceUrl" field. Provide the publisher URL (e.g. "https://nytimes.com/...").
+            - The "sourceName" field MUST contain the actual publisher's name (e.g., "Reuters", "BBC", "TechCrunch"). NEVER use "Google News" or "Google".
             
-            ✍️ TRANSFORMATIVE CONTENT (MANDATORY):
-            - "description" must be 3-4 bullet points of key facts, NOT a narrative paragraph.
-            - Do NOT copy the expressive style or exact phrasing from the original article.
-            - Use neutral, factual language. Focus on core facts only.
+            ✍️ TRANSFORMATIVE CONTENT & BIAS DETECTION:
+            - "description" must be 3-4 bullet points of the provided key facts.
+            - Map the "BiasRating" from the input strictly into "biasRating" (Left, Center, or Right).
+            - Map the "BiasExplanation" from the input strictly into "biasExplanation".
             
             SCHEMA:
             [
@@ -127,15 +174,15 @@ public class VertexAiService {
                 "imageUrl": "",
                 "sourceUrl": "https://example.com/article",
                 "sourceName": "Publisher Name",
+                "biasRating": "Center",
+                "biasExplanation": "Reports only verified facts without emotional language.",
                 "keywords": ["tag1", "tag2"]
               }
             ]
             INPUT FACTS:
             """ + rawFacts;
 
-        String jsonResponse = cleanJson(chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.2).build()
-        )).getResult().getOutput().getText());
+        String jsonResponse = cleanJson(geminiCall(prompt, false, 0.2));
 
         return sanitizeToonJson(jsonResponse);
     }
@@ -157,18 +204,56 @@ public class VertexAiService {
                 String verifiedNewsSearch = "https://www.google.com/search?tbm=nws&q=" +
                         URLEncoder.encode(title, StandardCharsets.UTF_8);
 
-                // 📰 Ensure valid sourceUrl
-                if (originalUrl == null || !originalUrl.startsWith("http") || originalUrl.contains("google.com/url")) {
+                // 📰 Ensure valid sourceUrl, avoid overriding strong URLs automatically unless they're dangerously broken
+                if (originalUrl == null || !originalUrl.startsWith("http") || originalUrl.contains("vertexaisearch")) {
                     card.put("sourceUrl", verifiedNewsSearch);
                     originalUrl = verifiedNewsSearch;
                 }
+                // Do NOT block google.com/url. We will let the Python Bias Engine unwrap Google URLs natively.
 
-                // 📰 Ensure sourceName is always populated for attribution display
+                // ==== ADD BIAS ENGINE HTTP CALL ====
+                try {
+                    // Call http://127.0.0.1:5000/analyze
+                    java.net.URL urlObj = new java.net.URL("http://127.0.0.1:5000/analyze");
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) urlObj.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                    conn.setRequestProperty("Accept", "application/json");
+                    conn.setDoOutput(true);
+                    
+                    String jsonInputString = "{\"url\": \"" + originalUrl + "\", \"headline\": \"" + title.replace("\"", "\\\"") + "\"}";
+                    
+                    try(java.io.OutputStream os = conn.getOutputStream()) {
+                        byte[] input = jsonInputString.getBytes("utf-8");
+                        os.write(input, 0, input.length);
+                    }
+                    
+                    if(conn.getResponseCode() == 200) {
+                        try(java.io.BufferedReader br = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(conn.getInputStream(), "utf-8"))) {
+                            StringBuilder response = new StringBuilder();
+                            String responseLine = null;
+                            while ((responseLine = br.readLine()) != null) {
+                                response.append(responseLine.trim());
+                            }
+                            
+                            Map<String, Object> pythonResult = objectMapper.readValue(response.toString(), new TypeReference<>() {});
+                            if (pythonResult.get("trueUrl") != null) card.put("sourceUrl", pythonResult.get("trueUrl"));
+                            if (pythonResult.get("sourceName") != null) card.put("sourceName", pythonResult.get("sourceName"));
+                            if (pythonResult.get("biasRating") != null) card.put("biasRating", pythonResult.get("biasRating"));
+                            if (pythonResult.get("biasExplanation") != null) card.put("biasExplanation", pythonResult.get("biasExplanation"));
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Bias Engine error: " + e.getMessage());
+                }
+
+                // 📰 Ensure sourceName is always populated for attribution display (Fallback)
                 String sourceName = (String) card.get("sourceName");
                 if (sourceName == null || sourceName.isEmpty()) {
                     // Extract publisher name from URL
                     try {
-                        java.net.URL url = new java.net.URL(originalUrl);
+                        java.net.URL url = new java.net.URL((String) card.get("sourceUrl"));
                         String host = url.getHost().replace("www.", "");
                         if (host.contains(".")) {
                             String[] parts = host.split("\\.");
@@ -224,9 +309,7 @@ public class VertexAiService {
             NEWS FACTS:
             """ + rawFacts;
 
-        return cleanJson(chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.3).build()
-        )).getResult().getOutput().getText());
+        return cleanJson(geminiCall(prompt, false, 0.3));
     }
 
     // --- PHASE 4: SINGLE CATEGORY QUIZ (Loop Support) ---
@@ -264,14 +347,12 @@ public class VertexAiService {
             %s
             """.formatted(category, category, category, newsContext);
 
-        return cleanJson(chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").temperature(0.4).build()
-        )).getResult().getOutput().getText());
+        return cleanJson(geminiCall(prompt, false, 0.4));
     }
 
     // --- CHAT & KEYWORDS ---
     public String extractSearchKeywords(String userQuestion) {
-        return chatModel.call(new Prompt("Extract 1-3 search keywords from: " + userQuestion)).getResult().getOutput().getText().trim();
+        return geminiCall("Extract 1-3 search keywords from: " + userQuestion, false, 0.3).trim();
     }
 
     public String chatWithSmartRouting(String userQuestion, List<String> localMatches) {
@@ -296,9 +377,7 @@ public class VertexAiService {
             QUESTION: %s
             """.formatted(context, userQuestion);
 
-        return chatModel.call(new Prompt(prompt,
-                VertexAiGeminiChatOptions.builder().model("gemini-2.5-flash").googleSearchRetrieval(!hasLocalNews).build()
-        )).getResult().getOutput().getText();
+        return geminiCall(prompt, !hasLocalNews, 0.7);
     }
 
     public String generateCatchUpContent(String databaseNews) {
@@ -324,10 +403,10 @@ public class VertexAiService {
             - Do NOT copy the narrative style of original articles.
             - Use neutral, factual language only.
             
-            SCHEMA: [{topic, title, description (bullet points), time, sourceUrl, sourceName}]
+            SCHEMA: [{topic, title, description (bullet points), time, sourceUrl, sourceName, biasRating, biasExplanation}]
             INPUT: %s
             """.formatted(databaseNews);
-        return cleanJson(chatModel.call(new Prompt(prompt)).getResult().getOutput().getText());
+        return cleanJson(geminiCall(prompt, false, 0.5));
     }
 
     private String cleanJson(String text) {

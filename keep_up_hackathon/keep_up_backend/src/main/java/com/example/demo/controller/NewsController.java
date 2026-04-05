@@ -41,9 +41,11 @@ public class NewsController {
     }
 
     @GetMapping("/generate")
-    public String generateDailyNews(@RequestParam(defaultValue = "US") String region) {
+    public String generateDailyNews(
+            @RequestParam(defaultValue = "US") String region,
+            @RequestParam(required = false) String date) {
         try {
-            String today = LocalDate.now().toString();
+            String today = (date != null && !date.isEmpty()) ? date : LocalDate.now().toString();
 
             // 1. Generate & Save News
             String rawFacts = vertexAiService.researchNews(region, today);
@@ -62,6 +64,8 @@ public class NewsController {
                     .collect(Collectors.joining("\n"));
 
             // 2. Generate Daily Quiz
+            System.out.println("⏳ Waiting 4 seconds to respect API rate limits...");
+            Thread.sleep(4000);
             String quizJson = vertexAiService.generateQuizFromNews(newsContext);
             latestQuizRepository.save(new LatestQuiz("latest_quiz", quizJson)).block();
 
@@ -69,6 +73,8 @@ public class NewsController {
             List<String> categories = Arrays.asList("Technology", "Science", "Sports", "Business", "Politics");
             for (String category : categories) {
                 try {
+                    System.out.println("⏳ Waiting 4 seconds to respect API rate limits before generating " + category + " quiz...");
+                    Thread.sleep(4000);
                     String singleCatJson = vertexAiService.generateSingleCategoryQuiz(newsContext, category);
                     List<QuizQuestion> questions = objectMapper.readValue(singleCatJson, new TypeReference<>() {});
                     categoryQuizRepository.save(new CategoryQuiz(today + "_" + category, today, category, questions)).block();
@@ -78,6 +84,8 @@ public class NewsController {
             }
 
             // 4. ✅ Trigger Catch-Up Generation immediately
+            System.out.println("⏳ Waiting 4 seconds before triggering Catch-Up Generation...");
+            Thread.sleep(4000);
             catchUpService.getWeeklyCatchUp(region);
 
             return "Generation Complete for " + today;

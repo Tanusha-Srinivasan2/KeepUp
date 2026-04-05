@@ -31,6 +31,8 @@ public class CatchUpService {
         // 1. BACKFILL: Ensure summaries exist for last 3 days
         for (int i = 0; i < 3; i++) {
             String targetDate = LocalDate.now().minusDays(i).toString();
+            System.out.println("⏳ Catch-up check for " + targetDate + ". Waiting 4s to respect limits...");
+            try { Thread.sleep(4000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             ensureSummaryExistsForDate(db, targetDate, region);
         }
 

@@ -119,14 +119,18 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   // --- BIAS METER UI ---
   Widget _buildBiasMeter(String rating, String explanation) {
     Color getBiasColor(String r) {
-      if (r.toLowerCase() == 'left') return Colors.blue;
-      if (r.toLowerCase() == 'right') return Colors.red;
+      String rating = r.toLowerCase();
+      if (rating == 'left' || rating == 'center left' || rating == 'center-left' || rating == 'lean left') return Colors.blue;
+      if (rating == 'right' || rating == 'center right' || rating == 'center-right' || rating == 'lean right') return Colors.red;
       return Colors.purple; // Center
     }
 
     double getPointerAlignment(String r) {
-      if (r.toLowerCase() == 'left') return -1.0;
-      if (r.toLowerCase() == 'right') return 1.0;
+      String rating = r.toLowerCase();
+      if (rating == 'left') return -1.0;
+      if (rating == 'center left' || rating == 'center-left' || rating == 'lean left') return -0.5;
+      if (rating == 'right') return 1.0;
+      if (rating == 'center right' || rating == 'center-right' || rating == 'lean right') return 0.5;
       return 0.0; // Center
     }
 
@@ -157,19 +161,22 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           ),
           const SizedBox(height: 15),
           // Spectrum Bar
-          Stack(
-            children: [
-              Container(
-                height: 8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: const LinearGradient(
-                    colors: [Colors.blue, Colors.purple, Colors.red],
+          SizedBox(
+            height: 14,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Colors.blue, Colors.purple, Colors.red],
+                    ),
                   ),
                 ),
-              ),
-              Positioned.fill(
-                child: Align(
+                Align(
                   alignment: Alignment(getPointerAlignment(rating), 0),
                   child: Container(
                     width: 14,
@@ -181,16 +188,15 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Left", style: GoogleFonts.poppins(fontSize: 10, color: Colors.blue)),
-              Text("Center", style: GoogleFonts.poppins(fontSize: 10, color: Colors.purple)),
-              Text("Right", style: GoogleFonts.poppins(fontSize: 10, color: Colors.red)),
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: Text("Left", style: GoogleFonts.poppins(fontSize: 10, color: Colors.blue)))),
+              Expanded(child: Align(alignment: Alignment.center, child: Text("Center", style: GoogleFonts.poppins(fontSize: 10, color: Colors.purple)))),
+              Expanded(child: Align(alignment: Alignment.centerRight, child: Text("Right", style: GoogleFonts.poppins(fontSize: 10, color: Colors.red)))),
             ],
           ),
           const Divider(height: 20),
